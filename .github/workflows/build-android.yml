@@ -1,0 +1,104 @@
+name: Build Android
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/flutter/**'
+      - '.github/workflows/**'
+  pull_request:
+    paths:
+      - 'apps/flutter/**'
+      - '.github/workflows/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+env:
+  FLUTTER_VERSION: '3.47.7'
+
+defaults:
+  run:
+    working-directory: apps/flutter
+
+jobs:
+  android:
+    name: Android arm64-v8a release (unsigned)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+        with:
+          cmdline-tools-version: '12266719'
+          log-accepted-android-sdk-licenses: false
+          packages: 'platform-tools'
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - name: Select JDK and install Android SDK packages
+        run: |
+          flutter config --jdk-dir="$JAVA_HOME"
+          sdkmanager 'platforms;android-37.0' 'build-tools;37.0.0' 'ndk;28.2.13676358'
+      - name: Update build date (UTC+8)
+        run: dart tool/update_build_date.dart
+      - run: flutter pub get --enforce-lockfile
+      - name: Remove mandatory signing guard (allow unsigned build)
+        run: |
+          python3 - <<'PY'
+          import re
+          path = 'android/app/build.gradle'
+          source = open(path, encoding='utf-8').read()
+          guard = re.compile(r'\n// Every APK must use the project certificate.*?\n\}\n', re.S)
+          patched, count = guard.subn('\n', source)
+          assert count == 1, f'expected exactly one signing guard block, found {count}'
+          open(path, 'w', encoding='utf-8').write(patched)
+          print('Signing guard removed: release APK will be unsigned.')
+          PY
+      - name: Build unsigned arm64-v8a APK
+        # Release-mode plugin registration must exclude dev-only native plugins.
+        run: |
+          flutter build apk --release --split-per-abi --target-platform android-arm64
+          git diff --exit-code -- pubspec.lock
+      - name: Verify single ABI and package APK
+        run: |
+          version=$(sed -n 's/^version: //p' pubspec.yaml | tr -d '\r')
+          mkdir -p build/distribution
+          apk="build/app/outputs/flutter-apk/app-arm64-v8a-release.apk"
+          python3 - "$apk" <<'PY'
+          import sys, zipfile
+          with zipfile.ZipFile(sys.argv[1]) as apk:
+              abis = {name.split('/')[1] for name in apk.namelist() if name.endswith('/libapp.so')}
+              uncompressed = [entry.filename for entry in apk.infolist()
+                              if entry.filename.startswith('lib/') and entry.filename.endswith('.so')
+                              and entry.compress_type != zipfile.ZIP_DEFLATED]
+          if abis != {'arm64-v8a'}:
+              raise SystemExit(f'Unexpected APK ABIs: {abis}')
+          if uncompressed:
+              raise SystemExit(f'Native libraries must be compressed: {uncompressed}')
+          print('ABIs OK:', abis)
+          PY
+          cp "$apk" "build/distribution/c001apk-$version-android-arm64-v8a-unsigned.apk"
+          (cd build/distribution && sha256sum ./*.apk > SHA256SUMS.txt)
+      - name: Upload arm64-v8a APK
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: c001apk-android-arm64-v8a-release-unsigned
+          path: |
+            apps/flutter/build/distribution/*-arm64-v8a-unsigned.apk
+            apps/flutter/build/distribution/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 14
