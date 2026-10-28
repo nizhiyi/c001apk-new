@@ -2,14 +2,16 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../components/device_identity_action.dart';
 import '../../logic/szlm_identity_service.dart';
 import '../../utils/official_device_identity.dart';
 import '../../utils/storage_util.dart';
-import '../../utils/szlm_duid_client.dart';
 import '../../utils/utils.dart';
 
 class DeviceIdentityPage extends StatefulWidget {
-  const DeviceIdentityPage({super.key});
+  const DeviceIdentityPage({super.key, this.identityService});
+
+  final SzlmIdentityService? identityService;
 
   @override
   State<DeviceIdentityPage> createState() => _DeviceIdentityPageState();
@@ -18,8 +20,7 @@ class DeviceIdentityPage extends StatefulWidget {
 class _DeviceIdentityPageState extends State<DeviceIdentityPage> {
   final _text = TextEditingController();
   String? _pending, _error;
-  String? _autoMessage;
-  bool _saving = false, _saved = false, _fetching = false, _autoFailed = false;
+  bool _saving = false, _saved = false;
 
   @override
   void dispose() {
@@ -77,7 +78,6 @@ class _DeviceIdentityPageState extends State<DeviceIdentityPage> {
         _pending = null;
         _saved = true;
         _error = null;
-        _autoMessage = null;
       });
     } on FormatException catch (error) {
       if (mounted) setState(() => _error = error.message.toString());
@@ -85,41 +85,6 @@ class _DeviceIdentityPageState extends State<DeviceIdentityPage> {
       if (mounted) setState(() => _error = '保存失败，请稍后重试');
     } finally {
       if (mounted) setState(() => _saving = false);
-    }
-  }
-
-  Future<void> _autoFetch() async {
-    if (_fetching) return;
-    setState(() {
-      _fetching = true;
-      _autoMessage = null;
-      _autoFailed = false;
-      _saved = false;
-    });
-    try {
-      await SzlmIdentityService.instance.renewNow();
-      if (!mounted) return;
-      setState(() {
-        _pending = null;
-        _error = null;
-        _autoMessage = '已获取新的设备标识并立即生效。返回内容页刷新即可。';
-      });
-    } on SzlmDuidException catch (error) {
-      if (mounted) {
-        setState(() {
-          _autoFailed = true;
-          _autoMessage = error.message;
-        });
-      }
-    } catch (_) {
-      if (mounted) {
-        setState(() {
-          _autoFailed = true;
-          _autoMessage = '自动获取失败，请检查网络后重试，或使用下方手动导入。';
-        });
-      }
-    } finally {
-      if (mounted) setState(() => _fetching = false);
     }
   }
 
@@ -159,7 +124,6 @@ class _DeviceIdentityPageState extends State<DeviceIdentityPage> {
 
   @override
   Widget build(BuildContext context) {
-    final hasIdentity = GStorage.szlmId.trim().isNotEmpty;
     return Scaffold(
       appBar: AppBar(title: const Text('设备标识')),
       body: Align(
@@ -172,38 +136,25 @@ class _DeviceIdentityPageState extends State<DeviceIdentityPage> {
               const Text('减少重复人机验证',
                   style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600)),
               const SizedBox(height: 8),
-              const Text('设备标识（数盟 ShuzlmID）是每个请求的首字段。它缺失或失效时，'
-                  '酷安会反复要求人机验证。'),
+              const Text('数盟 ID 用于酷安请求，有助于减少重复人机验证；'
+                  '互动是否可用仍取决于账号与服务端。'),
               const SizedBox(height: 20),
-              Text('自动获取', style: _sectionStyle),
+              Text('获取数盟 ID', style: _sectionStyle),
               const SizedBox(height: 8),
-              const Text('点击后注册一个新的设备标识并立即应用。已保存的标识会一直沿用，'
-                  '不会自行更换；只有出现人机验证且冷却时间已过时，才会在下次请求前自动更换。'),
-              const SizedBox(height: 12),
-              Wrap(spacing: 12, runSpacing: 8, children: [
-                FilledButton.icon(
-                  onPressed: _fetching ? null : _autoFetch,
-                  icon: const Icon(Icons.autorenew),
-                  label: Text(_fetching ? '正在获取…' : '自动获取并应用'),
-                ),
-              ]),
-              if (_autoMessage != null) ...[
-                const SizedBox(height: 8),
-                Text(
-                  _autoMessage!,
-                  style: TextStyle(
-                    color: _autoFailed
-                        ? Theme.of(context).colorScheme.error
-                        : Theme.of(context).colorScheme.primary,
-                  ),
-                ),
-              ],
+              DeviceIdentityAction(
+                service: widget.identityService,
+                onAcquired: () => setState(() {
+                  _pending = null;
+                  _error = null;
+                  _saved = false;
+                }),
+              ),
               const SizedBox(height: 24),
               const Divider(),
               const SizedBox(height: 8),
               Text('手动导入（兜底）', style: _sectionStyle),
               const SizedBox(height: 8),
-              const Text('自动获取不可用时，可从官方酷安手动导入：'
+              const Text('也可从官方酷安手动导入，不占用注册次数：'
                   '1. 进入官方酷安的 OAID 界面（“检查日志和测试”页）。'
                   '2. 向下找到“复制 OAID”，在同一页面累计点击 5 次。'
                   '3. 返回这里，粘贴完整内容，识别后保存。'),
@@ -241,13 +192,12 @@ class _DeviceIdentityPageState extends State<DeviceIdentityPage> {
                 ),
               ),
               const SizedBox(height: 8),
-              if (_pending != null)
-                const Text('已识别数盟 ID，复制内容已隐藏。点击保存后生效。'),
+              if (_pending != null) const Text('已识别数盟 ID，复制内容已隐藏。点击保存后生效。'),
               if (_saved) const Text('已保存。返回内容页后刷新即可，机型及其他设备参数已保留。'),
               if (_error != null)
                 Text(_error!,
-                    style: TextStyle(
-                        color: Theme.of(context).colorScheme.error)),
+                    style:
+                        TextStyle(color: Theme.of(context).colorScheme.error)),
               const SizedBox(height: 12),
               Wrap(spacing: 12, runSpacing: 8, children: [
                 OutlinedButton.icon(
@@ -261,10 +211,7 @@ class _DeviceIdentityPageState extends State<DeviceIdentityPage> {
                 ),
               ]),
               const SizedBox(height: 16),
-              Text(hasIdentity ? '本机已有设备标识，可重新自动获取或手动替换。' : '本机尚未保存设备标识。'),
-              const SizedBox(height: 8),
-              const Text('标识保存在本机，只用于酷安请求；自动获取会向数字联盟上报一份'
-                  '不含账号信息的设备报文。请勿将复制内容或真实标识公开。'),
+              const Text('标识保存在本机，只用于酷安请求。请勿将复制内容或真实标识公开。'),
             ],
           ),
         ),

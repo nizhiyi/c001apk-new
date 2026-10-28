@@ -123,6 +123,7 @@ class _ChatPageState extends State<ChatPage> {
             }
             if (index == rows.length - 1 &&
                 !_chatController.isEnd &&
+                !_chatController.automaticLoadPaused &&
                 !_chatController.isLoading &&
                 _chatController.loadingState.value is Success) {
               _chatController.onGetData(false);

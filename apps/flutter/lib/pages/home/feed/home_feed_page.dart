@@ -3,26 +3,30 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:get/get.dart';
-import 'package:get/get_navigation/src/dialog/dialog_route.dart';
 
 import '../../../components/common_body.dart';
+import '../../../components/scroll_hiding_action.dart';
+import '../../../components/home_publish_action.dart';
 import '../../../pages/home/feed/home_feed_controller.dart';
 import '../../../pages/home/home_page.dart' show TabType;
 import '../../../pages/home/return_top_controller.dart';
 import '../../../utils/global_data.dart';
 import '../../../utils/storage_util.dart';
 import '../../../utils/utils.dart';
-import '../../feed/reply/reply_page.dart';
 
 class HomeFeedPage extends StatefulWidget {
   const HomeFeedPage({
     super.key,
     required this.tabType,
     this.followType,
+    this.useRail = false,
+    this.onPublishVisibilityChanged,
   });
 
   final TabType tabType;
   final int? followType;
+  final bool useRail;
+  final ValueChanged<bool>? onPublishVisibilityChanged;
 
   @override
   State<HomeFeedPage> createState() => _HomeFeedPageState();
@@ -111,6 +115,7 @@ class _HomeFeedPageState extends State<HomeFeedPage>
     if (!_isFabVisible) {
       _isFabVisible = true;
       _fabAnimationCtr?.forward();
+      widget.onPublishVisibilityChanged?.call(true);
     }
   }
 
@@ -118,6 +123,7 @@ class _HomeFeedPageState extends State<HomeFeedPage>
     if (_isFabVisible) {
       _isFabVisible = false;
       _fabAnimationCtr?.reverse();
+      widget.onPublishVisibilityChanged?.call(false);
     }
   }
 
@@ -125,53 +131,14 @@ class _HomeFeedPageState extends State<HomeFeedPage>
   Widget build(BuildContext context) {
     super.build(context);
     return Scaffold(
-      floatingActionButton:
-          GlobalData().isLogin && widget.tabType == TabType.FEED
-              ? SlideTransition(
-                  position: Tween<Offset>(
-                    begin: const Offset(0, 2),
-                    end: const Offset(0, 0),
-                  ).animate(CurvedAnimation(
-                    parent: _fabAnimationCtr!,
-                    curve: Curves.easeInOut,
-                  )),
-                  child: FloatingActionButton(
-                    heroTag: null,
-                    onPressed: () {
-                      Navigator.of(context).push(
-                        GetDialogRoute(
-                          pageBuilder:
-                              (buildContext, animation, secondaryAnimation) {
-                            return const ReplyPage();
-                          },
-                          transitionDuration: const Duration(milliseconds: 500),
-                          transitionBuilder:
-                              (context, animation, secondaryAnimation, child) {
-                            const begin = Offset(0.0, 1.0);
-                            const end = Offset.zero;
-                            const curve = Curves.linear;
-
-                            var tween = Tween(begin: begin, end: end)
-                                .chain(CurveTween(curve: curve));
-
-                            return SlideTransition(
-                              position: animation.drive(tween),
-                              child: child,
-                            );
-                          },
-                        ),
-                      );
-                      // showModalBottomSheet<dynamic>(
-                      //   context: context,
-                      //   isScrollControlled: true,
-                      //   builder: (context) => const ReplyDialog(),
-                      // );
-                    },
-                    tooltip: '发布动态',
-                    child: const Icon(Icons.add),
-                  ),
-                )
-              : null,
+      floatingActionButton: GlobalData().isLogin &&
+              widget.tabType == TabType.FEED &&
+              !widget.useRail
+          ? ScrollHidingAction(
+              animation: _fabAnimationCtr!,
+              child: const HomePublishAction(),
+            )
+          : null,
       body: commonBody(_homeFeedController),
     );
   }

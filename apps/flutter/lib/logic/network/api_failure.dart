@@ -61,7 +61,10 @@ class ApiFailure implements Exception {
 
 /// Checks the envelope before generated model casts. An HTTP 200 alone says
 /// nothing about login, risk controls or the shape of the payload.
-Map<String, dynamic> readApiObject(Response<dynamic> response) {
+/// Topic follow actions may acknowledge success with status=1 and a message,
+/// without a data field. Data-reading callers keep requiring that field.
+Map<String, dynamic> readApiObject(Response<dynamic> response,
+    {bool allowSuccessWithoutData = false}) {
   final status = response.statusCode;
   if (status == null || status < 200 || status >= 300) {
     throw ApiFailure.http(status);
@@ -120,7 +123,8 @@ Map<String, dynamic> readApiObject(Response<dynamic> response) {
     }
     throw const ApiFailure(ApiFailureKind.business, '服务器未能完成请求，请稍后重试');
   }
-  if (!body.containsKey('data')) {
+  if (!body.containsKey('data') &&
+      !(allowSuccessWithoutData && businessStatus == 1)) {
     throw const ApiFailure(ApiFailureKind.invalidResponse, '服务器响应缺少数据字段，请稍后重试');
   }
   return body;

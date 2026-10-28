@@ -29,6 +29,8 @@ class ChatDelivery {
 }
 
 class ChatController extends CommonController {
+  @override
+  bool get supportsContentFilter => false;
   ChatController({required this.ukey});
   final String ukey;
   final editingController = TextEditingController();

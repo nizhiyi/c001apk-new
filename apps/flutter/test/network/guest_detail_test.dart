@@ -236,6 +236,59 @@ void main() {
     expect(prompts, 2);
   });
 
+  for (final initialOffset in [0.0, 140.0]) {
+    testWidgets(
+        'horizontal Markdown scroll preserves the header at vertical offset $initialOffset',
+        (tester) async {
+      adapter.apiBody = {
+        'data': {
+          ...(adapter.webBody['data'] as Map<String, dynamic>),
+          'feedTypeName': '图文',
+          'message':
+              '```text\n${List.filled(12, 'long_code_' * 40).join('\n')}\n```\n\n'
+                  '${List.filled(30, '正文段落。' * 20).join('\n\n')}',
+        }
+      };
+      await tester.pumpWidget(const GetMaterialApp(home: FeedPage(id: '123')));
+      await tester.runAsync(() async {
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+      });
+      await tester.pumpAndSettle();
+      final pageScroll = tester
+          .widget<CustomScrollView>(find.byType(CustomScrollView).first)
+          .controller!;
+      pageScroll.jumpTo(initialOffset);
+      await tester.pumpAndSettle();
+      final headerAuthor =
+          find.descendant(of: find.byType(AppBar), matching: find.text('合成作者'));
+      expect(headerAuthor, initialOffset > 50 ? findsOneWidget : findsNothing);
+      final codeScroll = find
+          .byWidgetPredicate((widget) =>
+              widget is SingleChildScrollView &&
+              widget.scrollDirection == Axis.horizontal)
+          .first;
+      final horizontal = tester
+          .state<ScrollableState>(find
+              .descendant(of: codeScroll, matching: find.byType(Scrollable))
+              .first)
+          .position;
+      horizontal.jumpTo(180);
+      await tester.pumpAndSettle();
+      expect(horizontal.pixels, greaterThan(50));
+      expect(headerAuthor, initialOffset > 50 ? findsOneWidget : findsNothing);
+      horizontal.jumpTo(0);
+      await tester.pumpAndSettle();
+      expect(headerAuthor, initialOffset > 50 ? findsOneWidget : findsNothing);
+      expect(pageScroll.offset, closeTo(initialOffset, 0.1));
+      // The article's own vertical scroll must still show and hide the header.
+      pageScroll.jumpTo(initialOffset > 50 ? 0 : 140);
+      await tester.pumpAndSettle();
+      expect(headerAuthor, initialOffset > 50 ? findsNothing : findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+    });
+  }
+
   testWidgets('scrolling to comments shows an action without a request',
       (tester) async {
     adapter.apiBody = {

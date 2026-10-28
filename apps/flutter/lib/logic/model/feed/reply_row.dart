@@ -1,5 +1,6 @@
 import 'package:json_annotation/json_annotation.dart';
 
+import '../../media/feed_media.dart';
 import 'user_action.dart';
 import 'user_info.dart';
 
@@ -17,7 +18,10 @@ class ReplyRow {
   dynamic ruid;
   String? rusername;
   String? pic;
+  @JsonKey(readValue: readFeedMediaUrls, fromJson: feedMediaUrlsFromJson)
   List<String>? picArr;
+  @JsonKey(readValue: readFeedMediaMetadata)
+  Object? imageUriList;
   String? message;
   dynamic replynum;
   dynamic likenum;
@@ -65,6 +69,7 @@ class ReplyRow {
     this.rusername,
     this.pic,
     this.picArr,
+    this.imageUriList,
     this.message,
     this.replynum,
     this.likenum,

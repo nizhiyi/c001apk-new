@@ -1,5 +1,6 @@
 import 'package:json_annotation/json_annotation.dart';
 
+import '../../media/feed_media.dart';
 import 'entity.dart';
 import 'extra_data_arr.dart';
 import 'relation_row.dart';
@@ -169,12 +170,15 @@ class Datum {
   String? feedTypeName;
   // String? turlTarget;
   // int? isModified;
-  @JsonKey(name: 'ip_location')
+  @JsonKey(name: 'ip_location', readValue: _readIpLocation)
   String? ipLocation;
   // int? enableModify;
   // String? info;
   String? infoHtml;
+  @JsonKey(readValue: readFeedMediaUrls, fromJson: feedMediaUrlsFromJson)
   List<String>? picArr;
+  @JsonKey(readValue: readFeedMediaMetadata)
+  Object? imageUriList;
   // @JsonKey(name: 'device_title_url')
   // String? deviceTitleUrl;
   // List<dynamic>? relateddata;
@@ -241,7 +245,7 @@ class Datum {
   String? targetTypeTitle;
   @JsonKey(name: 'hot_num_txt')
   dynamic hotNumTxt;
-  @JsonKey(name: 'follow_num')
+  @JsonKey(name: 'follow_num', readValue: _readFollowNum)
   dynamic followNum;
   dynamic downCount;
   @JsonKey(name: 'feed_comment_num_txt')
@@ -272,7 +276,7 @@ class Datum {
   int? messageUid;
   String? messageUsername;
   int? unreadNum;
-  @JsonKey(name: 'is_top')
+  @JsonKey(name: 'is_top', readValue: _readIsTop)
   int? isTop;
   String? ukey;
   String? description;
@@ -394,6 +398,7 @@ class Datum {
     // this.info,
     this.infoHtml,
     this.picArr,
+    this.imageUriList,
     // this.deviceTitleUrl,
     // this.relateddata,
     // this.mediaInfo,
@@ -478,3 +483,9 @@ class Datum {
 
   Map<String, dynamic> toJson() => _$DatumToJson(this);
 }
+
+Object? _readIsTop(Map json, String key) => json[key] ?? json['isTop'];
+
+Object? _readIpLocation(Map json, String key) => json[key] ?? json['ipLocation'];
+
+Object? _readFollowNum(Map json, String key) => json[key] ?? json['followNum'];

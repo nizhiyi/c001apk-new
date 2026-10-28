@@ -6,9 +6,11 @@ import '../utils/storage_util.dart';
 import 'adaptive_reading_pane.dart';
 
 class FeedReadingPane extends StatelessWidget {
-  const FeedReadingPane({super.key, required this.child, this.paneKey});
+  const FeedReadingPane(
+      {super.key, required this.child, this.paneKey, this.leadingInset = 0});
   final Widget child;
   final GlobalKey<AdaptiveReadingPaneState>? paneKey;
+  final double leadingInset;
 
   @override
   Widget build(BuildContext context) => ValueListenableBuilder(
@@ -23,6 +25,7 @@ class FeedReadingPane extends StatelessWidget {
                   : ReadingMode.automatic;
           return AdaptiveReadingPane(
             key: paneKey,
+            leadingInset: leadingInset,
             mode: mode,
             detailBuilder: (_, id, close) =>
                 FeedPage(key: ValueKey(id), id: id, onClose: close),

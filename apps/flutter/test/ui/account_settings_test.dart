@@ -107,6 +107,7 @@ void main() {
     await tester.tap(find.text('外观与字号'));
     await tester.pumpAndSettle();
     expect(find.text('动态取色'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('字体大小'), 200);
     expect(find.text('字体大小'), findsOneWidget);
     expect(find.byType(BackButton), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());

@@ -2,7 +2,6 @@ import '../../components/expressive_refresh_indicator.dart';
 import '../../components/expressive_loading_indicator.dart';
 // ignore_for_file: constant_identifier_names
 
-import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -12,11 +11,17 @@ import 'package:get/get.dart';
 import 'package:get/get_navigation/src/dialog/dialog_route.dart';
 
 import '../../components/cards/feed_reply_card.dart';
+import '../../components/content_filter_gate.dart';
+import '../../components/content_filter_text.dart';
+import '../../logic/content_filter/content_filter_projection.dart';
+import '../../logic/content_filter/content_filter_rule.dart';
+import '../../logic/model/feed_article/feed_article.dart';
 import '../../components/feed_article_body.dart';
 import '../../components/footer.dart';
 import '../../components/sliver_pinned_box_adapter.dart';
 import '../../components/cards/feed_card.dart';
 import '../../logic/model/feed/datum.dart';
+import '../../logic/media/feed_media_context.dart';
 import '../../logic/state/loading_state.dart';
 import '../../pages/feed/feed_controller.dart';
 import '../../pages/feed/reply/reply_dialog.dart' show ReplyType;
@@ -66,8 +71,7 @@ class _FeedPageState extends State<FeedPage> with TickerProviderStateMixin {
   AnimationController? _fabAnimationCtr;
   late bool _isFabVisible = true;
   late final _scrollController = ScrollController();
-  late final StreamController<bool> _titleStreamC = StreamController<bool>();
-  late bool _visibleTitle = false;
+  final _titleVisible = ValueNotifier<bool>(false);
   bool _showSource = false;
 
   bool get _hasMarkdown {
@@ -115,8 +119,7 @@ class _FeedPageState extends State<FeedPage> with TickerProviderStateMixin {
 
   @override
   void dispose() {
-    _titleStreamC.close();
-    _scrollController.removeListener(() {});
+    _titleVisible.dispose();
     _scrollController.dispose();
     _fabAnimationCtr?.dispose();
     Get.delete<FeedController>(tag: _id + _random);
@@ -236,12 +239,32 @@ class _FeedPageState extends State<FeedPage> with TickerProviderStateMixin {
                     );
                   } else {
                     return LayoutBuilder(builder: (_, constraints) {
-                      return feedArticleBody(
-                        constraints.maxWidth,
-                        _feedController.articleList![index - 1],
-                        _feedController.articleImgList!,
-                        forcePlain: _showSource,
-                      );
+                      final article = _feedController.articleList![index - 1];
+                      return ContentFilterText(
+                          key: ValueKey('article:$_id:$index'),
+                          source: article.type == 'title' ||
+                                  article.type == 'shareUrl'
+                              ? article.title.orEmpty
+                              : article.type == 'image'
+                                  ? article.description.orEmpty
+                                  : article.message.orEmpty,
+                          builder: (message) => feedArticleBody(
+                                constraints.maxWidth,
+                                FeedArticle.fromJson({
+                                  ...article.toJson(),
+                                  if (article.type == 'title' ||
+                                      article.type == 'shareUrl')
+                                    'title': message
+                                  else if (article.type == 'image')
+                                    'description': message
+                                  else
+                                    'message': message
+                                }),
+                                _feedController.articleImgList!,
+                                forcePlain: _showSource,
+                                mediaItems: mediaForDatum(feedState.response!),
+                                contentId: feedState.response!.id?.toString(),
+                              ));
                     });
                   }
                 },
@@ -284,6 +307,7 @@ class _FeedPageState extends State<FeedPage> with TickerProviderStateMixin {
           mainAxisSize: MainAxisSize.min,
           children: [
             const Divider(height: 1),
+            ContentFilterSummary(controller: _feedController),
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 4),
               child: Row(
@@ -483,6 +507,7 @@ class _FeedPageState extends State<FeedPage> with TickerProviderStateMixin {
               if (index == dataList.length) {
                 if (!_feedController.repliesDeferred.value &&
                     !_feedController.isEnd &&
+                    !_feedController.automaticLoadPaused &&
                     !_feedController.isLoading) {
                   _feedController.setFooterState(LoadingState.loading());
                   _feedController.onGetData(false);
@@ -540,6 +565,25 @@ class _FeedPageState extends State<FeedPage> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
+    return Obx(() {
+      final state = _feedController.feedState.value;
+      if (state is! Success) return _buildScreen(context);
+      final data = state.response as Datum;
+      return ContentFilterRevealScope(
+        contentKeys: _feedController.revealedContentKeys,
+        authorUids: _feedController.revealedAuthorUids,
+        child: ContentFilterGate(
+            data: data,
+            scope: FilterScope.feed,
+            page: true,
+            onClose: widget.onClose,
+            onReveal: () => _feedController.revealItem(data),
+            builder: _buildScreen),
+      );
+    });
+  }
+
+  Widget _buildScreen(BuildContext context) {
     return Scaffold(
       floatingActionButton: Obx(
         () => _feedController.feedState.value is Success && GlobalData().isLogin
@@ -575,19 +619,20 @@ class _FeedPageState extends State<FeedPage> with TickerProviderStateMixin {
                 ? null
                 : BackButton(onPressed: widget.onClose),
             titleSpacing: 0,
-            title: StreamBuilder(
-              stream: _titleStreamC.stream,
-              builder: (context, snapshot) {
+            title: ValueListenableBuilder<bool>(
+              valueListenable: _titleVisible,
+              builder: (context, visible, _) {
                 return GestureDetector(
                   onTap: () {
-                    if (_scrollController.offset != 0) {
+                    if (_scrollController.hasClients &&
+                        _scrollController.offset != 0) {
                       _scrollController.animToTop();
                     }
                   },
                   child: Container(
                     color: Colors.transparent,
                     width: double.infinity,
-                    child: snapshot.data == true
+                    child: visible && _feedController.feedState.value is Success
                         ? header(
                             context,
                             (_feedController.feedState.value as Success)
@@ -646,7 +691,8 @@ class _FeedPageState extends State<FeedPage> with TickerProviderStateMixin {
                                     data.messageTitle?.trim().isNotEmpty == true
                                         ? data.messageTitle
                                         : data.title,
-                                message: data.message,
+                                message: ContentFilterProjection.displayMessage(
+                                    data),
                                 context: context);
                             break;
                           case FeedMenuItem.Fav:
@@ -708,15 +754,13 @@ class _FeedPageState extends State<FeedPage> with TickerProviderStateMixin {
         () => _feedController.feedState.value is Success
             ? ExpressiveRefreshIndicator(
                 notificationPredicate: (notification) {
-                  final double offset = notification.metrics.pixels;
-                  if (offset > 50 && !_visibleTitle) {
-                    _visibleTitle = true;
-                    _titleStreamC.add(true);
-                  } else if (offset <= 50 && _visibleTitle) {
-                    _visibleTitle = false;
-                    _titleStreamC.add(false);
+                  if (notification.depth != 0 ||
+                      notification.metrics.axis != Axis.vertical) {
+                    return false;
                   }
-                  return notification.depth == 0;
+                  final double offset = notification.metrics.pixels;
+                  _titleVisible.value = offset > 50;
+                  return true;
                 },
                 refreshKey: _refreshKey,
                 onRefresh: () async {
@@ -724,6 +768,7 @@ class _FeedPageState extends State<FeedPage> with TickerProviderStateMixin {
                   await _feedController.onGetData();
                 },
                 child: CustomScrollView(
+                  key: PageStorageKey('feed-reading:$_id'),
                   controller: _scrollController,
                   physics: const AlwaysScrollableScrollPhysics(
                     parent: BouncingScrollPhysics(),

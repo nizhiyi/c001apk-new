@@ -8,12 +8,16 @@ import '../components/imageview.dart';
 import '../logic/model/feed_article/feed_article.dart';
 import '../utils/extensions.dart';
 import '../utils/utils.dart';
+import '../logic/media/feed_media.dart';
 
 Widget feedArticleBody(
   double maxWidth,
   FeedArticle data,
   List<String> picArr, {
   bool forcePlain = false,
+  List<FeedMedia>? mediaItems,
+  String? contentId,
+  MediaContentType contentType = MediaContentType.feed,
 }) {
   switch (data.type) {
     case 'title':
@@ -23,6 +27,10 @@ Widget feedArticleBody(
           data.title.orEmpty,
           fontSize: 17,
           isBold: true,
+          picArr: picArr,
+          mediaItems: mediaItems,
+          contentId: contentId,
+          contentType: contentType,
         ),
       );
     case 'text':
@@ -38,6 +46,9 @@ Widget feedArticleBody(
             fontSize: 16,
             forcePlain: forcePlain,
             picArr: picArr,
+            mediaItems: mediaItems,
+            contentId: contentId,
+            contentType: contentType,
           ),
         ),
       );
@@ -52,6 +63,9 @@ Widget feedArticleBody(
               picArr,
               isFeedArticle: true,
               articleImg: data.url.orEmpty,
+              mediaItems: mediaItems,
+              contentId: contentId,
+              contentType: contentType,
             ),
             if (!data.description.isNullOrEmpty) ...[
               const SizedBox(height: 4),

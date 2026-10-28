@@ -79,29 +79,41 @@ class LocalFollowController extends CommonController {
     if (isRefresh) onReset();
     if (isLoading) return;
     isLoading = true;
+    automaticLoadPaused = false;
     final generation = _generation;
     final pager = _pager!;
     try {
-      final items = await pager.next();
-      if (generation != _generation || isClosed) return;
-      warning.value = pager.warning;
-      isEnd = pager.isEnd;
-      final previous = !isRefresh && loadingState.value is Success
-          ? (loadingState.value as Success).response as List<Datum>
-          : <Datum>[];
-      final combined = [...previous, ...items];
-      if (combined.isEmpty) {
-        loadingState.value = pager.warning == null
-            ? LoadingState.empty()
-            : LoadingState.error(pager.warning!);
-      } else {
-        loadingState.value = LoadingState.success(combined);
+      for (var attempt = 0; attempt < 3; attempt++) {
+        final items = await pager.next();
+        if (generation != _generation || isClosed) return;
+        warning.value = pager.warning;
+        isEnd = pager.isEnd;
+        final previous = !isRefresh || attempt > 0 ? rawItems : <Datum>[];
+        final combined = [...previous, ...items];
+        if (combined.isEmpty) {
+          rawItems = [];
+          filteredItems.clear();
+          loadingState.value = pager.warning == null
+              ? LoadingState.empty()
+              : LoadingState.error(pager.warning!);
+        } else {
+          publishItems(combined);
+        }
+        footerState.value = pager.warning != null
+            ? LoadingState.error(pager.warning!)
+            : LoadingState.empty();
+        // Avoid automatic repeated reads while a cursor requires manual retry.
+        if (pager.warning != null) automaticLoadPaused = true;
+        if (isEnd ||
+            automaticLoadPaused ||
+            items.any((item) => filterMatch(item) == null)) {
+          break;
+        }
+        if (attempt == 2) {
+          automaticLoadPaused = true;
+          footerState.value = LoadingState.error('本批内容已过滤，点击继续加载');
+        }
       }
-      footerState.value = pager.warning != null
-          ? LoadingState.error(pager.warning!)
-          : LoadingState.empty();
-      // Avoid automatic repeated reads while a cursor requires manual retry.
-      if (pager.warning != null) isEnd = true;
     } finally {
       if (generation == _generation) isLoading = false;
     }

@@ -13,11 +13,16 @@ import 'package:window_manager/window_manager.dart';
 
 import 'components/custom_toast.dart';
 import 'components/app_keyboard_navigation.dart';
+import 'components/app_navigation_history.dart';
+import 'components/prompt_navigation.dart';
+import 'logic/accounts/account_store.dart';
+import 'logic/media/media_load_policy.dart';
+import 'logic/content_filter/app_content_filter.dart';
 import 'components/announcement_monitor.dart';
 import 'logic/announcements/app_announcements.dart';
 import 'constants/constants.dart';
 import 'logic/network/request.dart';
-import 'logic/szlm_identity_service.dart';
+import 'logic/onboarding/onboarding_state.dart';
 import 'pages/webview/captcha_page.dart';
 import 'router/app_pages.dart';
 import 'router/page_transitions.dart';
@@ -60,10 +65,10 @@ void main() async {
   }
 
   await GStorage.init();
-  // An identity that is already stored is reused as-is; only a first run, or
-  // one whose identity was rejected, has to register a device. The call must
-  // not delay the first frame.
-  unawaited(SzlmIdentityService.instance.ensure());
+  MediaLoadPolicy.current = MediaLoadPolicy(GStorage.settings)..start();
+  await AppContentFilter.init();
+  final onboarding = OnboardingState.current = OnboardingState(
+      settings: GStorage.settings, filter: AppContentFilter.service!);
   await AppAnnouncements.initialize();
   HttpOverrides.global = CustomHttpOverrides();
 
@@ -82,17 +87,41 @@ void main() async {
 
   Request().captchaVerifier = verifyCaptcha;
   final links = Platform.isAndroid
-      ? (AndroidLinks(onOpen: Utils.onOpenLink)..listen())
+      ? (AndroidLinks(onOpen: Utils.onOpenLink, onboarding: onboarding)
+        ..listen())
       : null;
   runApp(AnnouncementMonitor(
-      service: AppAnnouncements.service!, child: const C001APKAPP()));
+      service: AppAnnouncements.service!,
+      onboarding: onboarding,
+      child: const C001APKAPP()));
   WidgetsBinding.instance.addPostFrameCallback((_) {
     if (links != null) unawaited(links.ready());
   });
 }
 
-class C001APKAPP extends StatelessWidget {
+class C001APKAPP extends StatefulWidget {
   const C001APKAPP({super.key});
+
+  @override
+  State<C001APKAPP> createState() => _C001APKAPPState();
+}
+
+class _C001APKAPPState extends State<C001APKAPP> {
+  final _navigationHistory =
+      AppNavigationHistory(isReplayable: AppPages.canReplay);
+  final _promptNavigation = PromptNavigationObserver();
+
+  @override
+  void initState() {
+    super.initState();
+    AccountStore.changes.addListener(_navigationHistory.clear);
+  }
+
+  @override
+  void dispose() {
+    AccountStore.changes.removeListener(_navigationHistory.clear);
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -219,6 +248,7 @@ class C001APKAPP extends StatelessWidget {
       darkTheme: darkTheme,
       themeMode: GStorage.getThemeMode(),
       getPages: AppPages.getPages,
+      navigatorObservers: [_navigationHistory, _promptNavigation],
       customTransition: AppPageTransition(),
       transitionDuration: const Duration(milliseconds: 450),
       initialRoute: '/',
@@ -250,6 +280,7 @@ class C001APKAPP extends StatelessWidget {
                 },
                 child: AppKeyboardNavigation(
                   navigatorKey: Get.key,
+                  history: _navigationHistory,
                   child: child!,
                 ),
               ),

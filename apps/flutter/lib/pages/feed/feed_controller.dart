@@ -194,21 +194,7 @@ class FeedController extends CommonController {
   }
 
   void onBlockReply(dynamic uid, dynamic id) {
-    List<Datum> replyList = (loadingState.value as Success).response;
-    if (id != null) {
-      replyList = replyList.map((reply) {
-        if (reply.id == id) {
-          return reply
-            ..replyRows =
-                reply.replyRows!.where((reply) => reply.uid != uid).toList();
-        } else {
-          return reply;
-        }
-      }).toList();
-    } else {
-      replyList = replyList.where((reply) => reply.uid != uid).toList();
-    }
-    loadingState.value = LoadingState.success(replyList);
+    reapplyFilters();
   }
 
   @override
@@ -221,23 +207,14 @@ class FeedController extends CommonController {
           ] +
           filterList;
     }
-    List<String> userBlackList = GStorage.blackList
-        .get(BlackListBoxKey.userBlackList, defaultValue: <String>[]);
-    return filterList
-        .map((data) => data
-          ..replyRows = !data.replyRows.isNullOrEmpty
-              ? data.replyRows!
-                  .where(
-                      (reply) => !userBlackList.contains(reply.uid.toString()))
-                  .toList()
-              : null)
-        .toList();
+    for (final item in filterList) {
+      item.entityType ??= 'feed_reply';
+    }
+    return filterList;
   }
 
   void updateReply(bool isReply, Datum data, dynamic id, dynamic fid) {
-    List<Datum> replyList = loadingState.value is Success
-        ? (loadingState.value as Success).response
-        : [];
+    List<Datum> replyList = [...rawItems];
     if (isReply) {
       replyList = replyList.map((reply) {
         if (reply.id == (fid ?? id)) {
@@ -249,7 +226,7 @@ class FeedController extends CommonController {
     } else {
       replyList.insert(topReply == null ? 0 : 1, data);
     }
-    loadingState.value = LoadingState.success(replyList);
+    publishItems(replyList);
   }
 
   @override

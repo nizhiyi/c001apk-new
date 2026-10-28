@@ -179,8 +179,8 @@ void main() {
           'DUsynthetic0123456789_-');
       expect(
           OfficialDeviceIdentity.validate(
-              '  DUaVFlbAMrmH2Z57PEhm_N9EO4RoUdvNstg5 '),
-          'DUaVFlbAMrmH2Z57PEhm_N9EO4RoUdvNstg5');
+              '  DUsynthetic0123456789abcdefghijklmno '),
+          'DUsynthetic0123456789abcdefghijklmno');
     });
 
     test('refuses the rejection answer and malformed values', () {

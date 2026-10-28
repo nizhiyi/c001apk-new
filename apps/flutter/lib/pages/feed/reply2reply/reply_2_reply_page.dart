@@ -4,6 +4,7 @@ import 'package:get/get.dart';
 import 'package:get/get_navigation/src/dialog/dialog_route.dart';
 
 import '../../../components/common_body.dart';
+import '../../../components/content_filter_gate.dart';
 import '../../../logic/model/feed/datum.dart';
 import '../../../logic/state/loading_state.dart';
 import '../../../pages/feed/reply/reply_dialog.dart' show ReplyType;
@@ -46,72 +47,82 @@ class Reply2ReplyPage extends StatelessWidget {
         child: SafeArea(
           bottom: false,
           child: Obx(
-            () => controller.loadingState.value is Success
-                ? buildBody(
-                    controller,
-                    isReply2Reply: true,
-                    uid: originReply.uid,
-                    onReply: (id, uname, fid) async {
-                      if (GlobalData().isLogin) {
-                        Navigator.of(context)
-                            .push(
-                          GetDialogRoute(
-                            pageBuilder:
-                                (buildContext, animation, secondaryAnimation) {
-                              return ReplyPage(
-                                type: ReplyType.reply,
-                                username: uname,
-                                id: id,
-                              );
-                            },
-                            transitionDuration:
-                                const Duration(milliseconds: 500),
-                            transitionBuilder: (context, animation,
-                                secondaryAnimation, child) {
-                              const begin = Offset(0.0, 1.0);
-                              const end = Offset.zero;
-                              const curve = Curves.linear;
+            () => ContentFilterRevealScope(
+              contentKeys: controller.revealedContentKeys,
+              authorUids: controller.revealedAuthorUids,
+              child: Column(children: [
+                ContentFilterSummary(controller: controller),
+                Expanded(
+                  child: controller.loadingState.value is Success
+                      ? buildBody(
+                          controller,
+                          isReply2Reply: true,
+                          uid: originReply.uid,
+                          onReply: (id, uname, fid) async {
+                            if (GlobalData().isLogin) {
+                              Navigator.of(context)
+                                  .push(
+                                GetDialogRoute(
+                                  pageBuilder: (buildContext, animation,
+                                      secondaryAnimation) {
+                                    return ReplyPage(
+                                      type: ReplyType.reply,
+                                      username: uname,
+                                      id: id,
+                                    );
+                                  },
+                                  transitionDuration:
+                                      const Duration(milliseconds: 500),
+                                  transitionBuilder: (context, animation,
+                                      secondaryAnimation, child) {
+                                    const begin = Offset(0.0, 1.0);
+                                    const end = Offset.zero;
+                                    const curve = Curves.linear;
 
-                              var tween = Tween(begin: begin, end: end)
-                                  .chain(CurveTween(curve: curve));
+                                    var tween = Tween(begin: begin, end: end)
+                                        .chain(CurveTween(curve: curve));
 
-                              return SlideTransition(
-                                position: animation.drive(tween),
-                                child: child,
+                                    return SlideTransition(
+                                      position: animation.drive(tween),
+                                      child: child,
+                                    );
+                                  },
+                                ),
+                              )
+                                  .then(
+                                (result) {
+                                  if (result != null &&
+                                      result['data'] != null) {
+                                    controller.updateReply(
+                                        result['data'] as Datum, id);
+                                  }
+                                },
                               );
-                            },
-                          ),
-                        )
-                            .then(
-                          (result) {
-                            if (result != null && result['data'] != null) {
-                              controller.updateReply(
-                                  result['data'] as Datum, id);
+                              // dynamic result = await showModalBottomSheet<dynamic>(
+                              //   context: context,
+                              //   isScrollControlled: true,
+                              //   builder: (context) => ReplyDialog(
+                              //     type: ReplyType.reply,
+                              //     username: uname,
+                              //     id: id,
+                              //   ),
+                              // );
+                              // if (result != null && result['data'] != null) {
+                              //   controller.updateReply(result['data'] as Datum, id);
+                              // }
                             }
                           },
-                        );
-                        // dynamic result = await showModalBottomSheet<dynamic>(
-                        //   context: context,
-                        //   isScrollControlled: true,
-                        //   builder: (context) => ReplyDialog(
-                        //     type: ReplyType.reply,
-                        //     username: uname,
-                        //     id: id,
-                        //   ),
-                        // );
-                        // if (result != null && result['data'] != null) {
-                        //   controller.updateReply(result['data'] as Datum, id);
-                        // }
-                      }
-                    },
-                  )
-                : Center(
-                    child: buildBody(
-                      controller,
-                      isReply2Reply: true,
-                      uid: originReply.uid,
-                    ),
-                  ),
+                        )
+                      : Center(
+                          child: buildBody(
+                            controller,
+                            isReply2Reply: true,
+                            uid: originReply.uid,
+                          ),
+                        ),
+                ),
+              ]),
+            ),
           ),
         ),
       ),

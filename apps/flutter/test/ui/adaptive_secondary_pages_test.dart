@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:c001apk_flutter/components/app_keyboard_navigation.dart';
+import 'package:c001apk_flutter/components/adaptive_main_scaffold.dart';
 import 'package:c001apk_flutter/pages/message/message_page.dart';
 import 'package:c001apk_flutter/pages/settings/settings_page.dart';
 import 'package:c001apk_flutter/utils/global_data.dart';
@@ -47,6 +48,62 @@ void main() {
     addTearDown(view.resetPhysicalSize);
     addTearDown(view.resetDevicePixelRatio);
   });
+
+  for (final width in [360.0, 393.0]) {
+    testWidgets('my page scrolls behind floating navigation at ${width}dp',
+        (tester) async {
+      await resize(tester, width, height: 784);
+      await tester.pumpWidget(app(
+        MediaQuery(
+          data: MediaQueryData(
+            size: Size(width, 784),
+            padding: const EdgeInsets.only(top: 24, bottom: 24),
+            viewPadding: const EdgeInsets.only(top: 24, bottom: 24),
+            textScaler: const TextScaler.linear(1.5),
+          ),
+          child: AdaptiveMainScaffold(
+            selectedIndex: 2,
+            onDestinationSelected: (_) {},
+            bodyBuilder: (_, __) => const MessagePage(),
+          ),
+        ),
+        scale: 1.5,
+      ));
+      await tester.pumpAndSettle();
+      final list = find.byType(CustomScrollView);
+      expect(tester.getRect(list).bottom, 784,
+          reason: 'The navigation reserve must not shorten the viewport');
+      await tester.drag(list, const Offset(0, -2000));
+      await tester.pumpAndSettle();
+      final bar =
+          tester.getRect(find.byKey(const ValueKey('liquid-drag-surface')));
+      expect(tester.getRect(find.text('私信与信息')).bottom,
+          lessThanOrEqualTo(bar.top - 10));
+      final position = tester
+          .state<ScrollableState>(
+              find.descendant(of: list, matching: find.byType(Scrollable)))
+          .position;
+      await tester
+          .runAsync(() => GStorage.settings.put('floatingNavigation', false));
+      await tester.pumpAndSettle();
+      expect(
+          tester
+              .state<ScrollableState>(
+                  find.descendant(of: list, matching: find.byType(Scrollable)))
+              .position,
+          same(position));
+      final standard = tester.getRect(find.byType(NavigationBar));
+      expect(tester.getRect(list).bottom, standard.top);
+      await tester.drag(list, const Offset(0, -2000));
+      await tester.pumpAndSettle();
+      expect(tester.getRect(find.text('私信与信息')).bottom,
+          lessThanOrEqualTo(standard.top - 10));
+      await tester
+          .runAsync(() => GStorage.settings.delete('floatingNavigation'));
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+    });
+  }
 
   testWidgets('my page places messages beside shortcuts only when they fit',
       (tester) async {
@@ -95,6 +152,10 @@ void main() {
     expect(find.text('分栏阅读'), findsNothing);
     await tester.tap(find.text('外观与字号'));
     await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('分栏阅读'), 200,
+        scrollable: find.descendant(
+            of: find.byType(SettingsDetailPage),
+            matching: find.byType(Scrollable)));
     expect(find.text('分栏阅读'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });

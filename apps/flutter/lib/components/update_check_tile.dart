@@ -8,7 +8,10 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../logic/app_update/update_preferences.dart';
 import '../logic/app_update/update_service.dart';
+import '../logic/onboarding/onboarding_state.dart';
 import '../utils/storage_util.dart';
+import 'onboarding_gate.dart';
+import 'prompt_navigation.dart';
 import 'update_dialog.dart';
 
 class AppUpdates {
@@ -20,6 +23,12 @@ class AppUpdates {
   static bool _hasShownDialog = false;
   static bool get hasShownDialog => _hasShownDialog;
   static bool get isActive => _active != null;
+
+  static bool _safeAutomaticRoute({bool allowSettings = false}) =>
+      (Get.currentRoute == '/' ||
+          (allowSettings && Get.currentRoute == '/settings')) &&
+      Get.isDialogOpen != true &&
+      Get.isBottomSheetOpen != true;
 
   static Future<void> _open(BuildContext context, Uri uri,
       {Uri? fallback}) async {
@@ -39,7 +48,9 @@ class AppUpdates {
   }
 
   static Future<void> check(BuildContext context,
-      {bool automatic = false, UpdateService? updateService}) async {
+      {bool automatic = false,
+      UpdateService? updateService,
+      OnboardingState? onboarding}) async {
     final pending = _active;
     if (pending != null) {
       if (automatic) return;
@@ -56,16 +67,39 @@ class AppUpdates {
     }
     final completed = Completer<void>();
     _active = completed.future;
+    final gate = onboarding ?? OnboardingState.current;
+    var deferredByOnboarding = gate?.active == true;
+    void trackOnboarding() {
+      if (gate?.active == true) deferredByOnboarding = true;
+    }
+
+    gate?.addListener(trackOnboarding);
     try {
+      await waitForOnboardingNavigation(gate);
+      if (!context.mounted) return;
       final updater = updateService ?? service;
       final result = await updater.check(automatic: automatic);
+      await waitForOnboardingNavigation(gate);
       if (!context.mounted) return;
+      // Keep the fetched result while unsafe routes or modals are open. A guide
+      // detour permits the settings root, never login or verification routes.
+      while (
+          deferredByOnboarding && !_safeAutomaticRoute(allowSettings: true)) {
+        await PromptNavigation.waitUntil(
+            () =>
+                !context.mounted ||
+                (gate?.active != true &&
+                    _safeAutomaticRoute(allowSettings: true)),
+            alsoListenTo: gate);
+        await waitForOnboardingNavigation(gate);
+        if (!context.mounted) return;
+      }
       // An automatic prompt must not interrupt login, verification or a dialog.
       if (automatic &&
-          (Get.currentRoute != '/' ||
-              Get.isDialogOpen == true ||
-              Get.isBottomSheetOpen == true ||
-              !updater.preferences.enabled)) return;
+          (!_safeAutomaticRoute(allowSettings: deferredByOnboarding) ||
+              !updater.preferences.enabled)) {
+        return;
+      }
       if (result.status == UpdateStatus.available) {
         final release = result.release!;
         _hasShownDialog = true;
@@ -105,6 +139,7 @@ class AppUpdates {
                 : result.message)));
       }
     } finally {
+      gate?.removeListener(trackOnboarding);
       _active = null;
       completed.complete();
     }

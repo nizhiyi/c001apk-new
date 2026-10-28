@@ -26,6 +26,34 @@ class UserController extends CommonController {
   bool isBlocked = false;
 
   @override
+  void revealAuthorForPage(String uid) {
+    super.revealAuthorForPage(uid);
+    if (uid == this.uid &&
+        userState.value is Success &&
+        loadingState.value is Error &&
+        !isLoading) {
+      onReset();
+      onGetData();
+    }
+  }
+
+  @override
+  void reapplyFilters() {
+    final previouslyBlocked = isBlocked;
+    isBlocked = GStorage.checkUser(uid);
+    if (isBlocked && !revealedAuthorUids.contains(uid)) {
+      setBlockedLoaidngState();
+      return;
+    }
+    if (previouslyBlocked && !isBlocked && loadingState.value is Error) {
+      onReset();
+      onGetData();
+      return;
+    }
+    super.reapplyFilters();
+  }
+
+  @override
   List<Datum>? handleResponse(List<Datum> dataList) {
     if (dataList.lastOrNull?.entityTemplate == 'noMoreDataCard') {
       isEnd = true;
@@ -57,7 +85,7 @@ class UserController extends CommonController {
       uid = (response.response as Datum).uid.toString();
       username = (response.response as Datum).username;
       isBlocked = GStorage.checkUser(uid);
-      if (!isBlocked) {
+      if (!isBlocked || revealedAuthorUids.contains(uid)) {
         onGetData();
       } else {
         setBlockedLoaidngState();

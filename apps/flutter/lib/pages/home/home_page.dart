@@ -7,6 +7,9 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
 import '../../components/mouse_drag_scroll.dart';
+import '../../components/liquid_top_bar.dart';
+import '../../components/liquid_navigation_bar.dart';
+import '../../utils/storage_util.dart';
 import '../../pages/home/app/app_list_page.dart';
 import '../../pages/home/feed/home_feed_page.dart';
 import '../../pages/home/return_top_controller.dart';
@@ -35,7 +38,14 @@ enum TabType {
 }
 
 class HomePage extends StatefulWidget {
-  const HomePage({super.key});
+  const HomePage(
+      {super.key,
+      this.useRail = false,
+      this.onFeedSelected,
+      this.onPublishVisibilityChanged});
+
+  final bool useRail;
+  final ValueChanged<bool>? onFeedSelected, onPublishVisibilityChanged;
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -58,14 +68,17 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     TabType.COOLPIC,
   ];
 
-  final _pages = [
-    if (Platform.isAndroid) const AppListPage(),
-    const HomeFeedPage(tabType: TabType.FEED),
-    const HomeFeedPage(tabType: TabType.HOT),
-    const HomeTopicPage(tabType: TabType.TOPIC),
-    const HomeTopicPage(tabType: TabType.PRODUCT),
-    const HomeFeedPage(tabType: TabType.COOLPIC),
-  ];
+  List<Widget> get _pages => [
+        if (Platform.isAndroid) const AppListPage(),
+        HomeFeedPage(
+            tabType: TabType.FEED,
+            useRail: widget.useRail,
+            onPublishVisibilityChanged: widget.onPublishVisibilityChanged),
+        const HomeFeedPage(tabType: TabType.HOT),
+        const HomeTopicPage(tabType: TabType.TOPIC),
+        const HomeTopicPage(tabType: TabType.PRODUCT),
+        const HomeFeedPage(tabType: TabType.COOLPIC),
+      ];
 
   void scrollToTop(int index) {
     _pageScrollController.setIndex(_tabTypes[index].index);
@@ -80,6 +93,8 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
       initialIndex: _tabTypes.indexOf(TabType.FEED),
       length: _tabTypes.length,
     );
+    _tabController.addListener(() => widget.onFeedSelected
+        ?.call(_tabTypes[_tabController.index] == TabType.FEED));
 
     _returnTopSubscription = _pageScrollController.index.listen((index) {
       if (index == 998) {
@@ -97,29 +112,41 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        automaticallyImplyLeading: false,
-        title: MouseDragScroll(
-          child: TabBar(
-            controller: _tabController,
-            tabs: _tabTypes.map((type) => Tab(text: type.label)).toList(),
-            isScrollable: true,
-            onTap: (index) {
-              if (!_tabController.indexIsChanging) {
-                scrollToTop(index);
-              }
-            },
-          ),
+    return LiquidTopBarScaffold(
+      glassTitle: (context) => AnimatedBuilder(
+        animation: _tabController,
+        builder: (context, _) => LiquidNavigationBar.tabs(
+          selectedIndex: _tabController.index,
+          labels: _tabTypes.map((type) => type.label).toList(),
+          level: GStorage.liquidGlassLevel,
+          onDestinationSelected: (index) {
+            if (_tabController.index == index) {
+              scrollToTop(index);
+            } else {
+              _tabController.animateTo(index);
+            }
+          },
         ),
-        actions: [
-          IconButton(
-            onPressed: () => Get.toNamed('/search'),
-            icon: const Icon(Icons.search),
-            tooltip: '搜索',
-          )
-        ],
       ),
+      title: MouseDragScroll(
+        child: TabBar(
+          controller: _tabController,
+          tabs: _tabTypes.map((type) => Tab(text: type.label)).toList(),
+          isScrollable: true,
+          dividerColor: Theme.of(context).platform == TargetPlatform.android
+              ? Colors.transparent
+              : null,
+          tabAlignment: Theme.of(context).platform == TargetPlatform.android
+              ? TabAlignment.start
+              : null,
+          onTap: (index) {
+            if (!_tabController.indexIsChanging) {
+              scrollToTop(index);
+            }
+          },
+        ),
+      ),
+      onSearch: () => Get.toNamed('/search'),
       body: TabBarView(controller: _tabController, children: _pages),
     );
   }

@@ -2,9 +2,11 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:window_manager/window_manager.dart';
 import 'keyboard_scroll_region.dart';
+import 'app_navigation_history.dart';
 
 /// Fallback keyboard navigation for routes whose scroll controllers are not
 /// primary. Controls inside the route get the first chance to handle each key.
@@ -13,10 +15,12 @@ class AppKeyboardNavigation extends StatefulWidget {
     super.key,
     required this.navigatorKey,
     required this.child,
+    this.history,
   });
 
   final GlobalKey<NavigatorState> navigatorKey;
   final Widget child;
+  final AppNavigationHistory? history;
 
   @override
   State<AppKeyboardNavigation> createState() => _AppKeyboardNavigationState();
@@ -25,14 +29,14 @@ class AppKeyboardNavigation extends StatefulWidget {
 class _AppKeyboardNavigationState extends State<AppKeyboardNavigation> {
   bool _exitPromptOpen = false;
 
-  Future<void> _back() async {
+  Future<void> _back({bool promptAtRoot = true}) async {
     final navigator = widget.navigatorKey.currentState;
     if (navigator == null) return;
     if (navigator.canPop()) {
       await navigator.maybePop();
       return;
     }
-    if (_exitPromptOpen) return;
+    if (!promptAtRoot || _exitPromptOpen) return;
     _exitPromptOpen = true;
     try {
       final exit = await showDialog<bool>(
@@ -140,6 +144,7 @@ class _AppKeyboardNavigationState extends State<AppKeyboardNavigation> {
       return KeyEventResult.ignored;
     }
     final position = target.position;
+    widget.history?.cancelRestore();
     final movingDown = event.logicalKey == LogicalKeyboardKey.arrowDown;
     final reversed = target.axisDirection == AxisDirection.up;
     final offset = movingDown != reversed ? 64.0 : -64.0;
@@ -152,10 +157,32 @@ class _AppKeyboardNavigationState extends State<AppKeyboardNavigation> {
   }
 
   @override
-  Widget build(BuildContext context) => Focus(
-        canRequestFocus: false,
-        skipTraversal: true,
-        onKeyEvent: _onKeyEvent,
-        child: widget.child,
+  Widget build(BuildContext context) => AppNavigationHistoryScope(
+        history: widget.history,
+        child: NotificationListener<ScrollMetricsNotification>(
+            onNotification: (_) {
+              widget.history?.restorePending();
+              return false;
+            },
+            child: Listener(
+                behavior: HitTestBehavior.translucent,
+                onPointerDown: (event) {
+                  if (event.kind == PointerDeviceKind.mouse &&
+                      event.buttons == kBackMouseButton) {
+                    unawaited(_back(promptAtRoot: false));
+                  } else if (event.kind == PointerDeviceKind.mouse &&
+                      event.buttons == kForwardMouseButton) {
+                    widget.history?.forward();
+                  } else {
+                    widget.history?.cancelRestore();
+                  }
+                },
+                onPointerSignal: (_) => widget.history?.cancelRestore(),
+                child: Focus(
+                  canRequestFocus: false,
+                  skipTraversal: true,
+                  onKeyEvent: _onKeyEvent,
+                  child: widget.child,
+                ))),
       );
 }

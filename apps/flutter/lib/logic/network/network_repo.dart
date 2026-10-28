@@ -619,21 +619,28 @@ class NetworkRepo {
             .get(BlackListBoxKey.userBlackList, defaultValue: <String>[]);
         List<String> topicBlackList = GStorage.blackList
             .get(BlackListBoxKey.topicBlackList, defaultValue: <String>[]);
-        List<Datum> filterList = responseData.data!.where((item) {
+        List<Datum> accepted = responseData.data!.where((item) {
           return item.entityTemplate == 'refreshCard' &&
                   item.title.orEmpty.contains('没有')
               ? true
               : (Constants.entityTypeList.contains(item.entityType) ||
-                      (Constants.entityTemplateList +
-                              (inCluldeConfigCard ? ['configCard'] : []))
-                          .contains(item.entityTemplate)) &&
-                  !userBlackList.contains(item.uid.toString()) &&
-                  topicBlackList.firstWhereOrNull((keyword) =>
-                          '${item.tags},${item.ttitle},${item.relationRows?.getOrNull(0)?.title}'
-                              .contains(keyword)) ==
-                      null;
+                  (Constants.entityTemplateList +
+                          (inCluldeConfigCard ? ['configCard'] : []))
+                      .contains(item.entityTemplate));
         }).toList();
-        return LoadingState.success(filterList);
+        final filterList = accepted
+            .where((item) =>
+                !userBlackList.contains(item.uid.toString()) &&
+                topicBlackList.firstWhereOrNull((keyword) =>
+                        '${item.tags},${item.ttitle},${item.relationRows?.getOrNull(0)?.title}'
+                            .contains(keyword)) ==
+                    null)
+            .toList();
+        final cursorRows = responseData.data!.where((item) => item.id != null);
+        return Success(filterList,
+            rawResponse: accepted,
+            firstItem: cursorRows.firstOrNull?.id.toString(),
+            lastItem: cursorRows.lastOrNull?.id.toString());
       } else {
         return LoadingState.empty();
       }

@@ -18,11 +18,19 @@ class KeyboardScrollRegionState extends State<KeyboardScrollRegion> {
   @override
   void initState() {
     super.initState();
-    if (widget.autofocus) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _focus.requestFocus();
-      });
-    }
+    if (widget.autofocus) _requestFocus();
+  }
+
+  @override
+  void didUpdateWidget(KeyboardScrollRegion oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.autofocus && !oldWidget.autofocus) _requestFocus();
+  }
+
+  void _requestFocus() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && widget.autofocus) _focus.requestFocus();
+    });
   }
 
   @override

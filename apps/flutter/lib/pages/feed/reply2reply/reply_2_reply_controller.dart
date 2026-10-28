@@ -23,6 +23,10 @@ class Reply2ReplyController extends CommonController {
 
   @override
   List<Datum>? handleResponse(List<Datum> dataList) {
+    originReply.entityType ??= 'feed_reply';
+    for (final item in dataList) {
+      item.entityType ??= 'feed_reply';
+    }
     return page == 1 ? [originReply] + dataList : null;
   }
 
@@ -43,11 +47,9 @@ class Reply2ReplyController extends CommonController {
   }
 
   void updateReply(Datum data, dynamic id) {
-    List<Datum> replyList = loadingState.value is Success
-        ? (loadingState.value as Success).response
-        : [];
+    List<Datum> replyList = [...rawItems];
     int index = replyList.indexWhere((reply) => reply.id == id);
     replyList.insert(index + 1, data);
-    loadingState.value = LoadingState.success(replyList);
+    publishItems(replyList);
   }
 }

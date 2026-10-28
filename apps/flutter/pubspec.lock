@@ -410,7 +410,7 @@ packages:
     source: hosted
     version: "2.6.2"
   file_selector_windows:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: file_selector_windows
       sha256: "2ad726953f6e8affbc4df8dc78b77c3b4a060967a291e528ef72ae846c60fb69"

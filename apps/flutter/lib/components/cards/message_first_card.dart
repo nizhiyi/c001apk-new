@@ -4,15 +4,14 @@ import 'package:get/get.dart';
 import '../../pages/ffflist/ffflist_page.dart' show FFFListType;
 import '../../utils/extensions.dart';
 
-Widget messageFirstCard(
-  bool isLogin,
-  BuildContext context,
-  List<int?>? values,
-) {
+Widget messageFirstCard(bool isLogin, BuildContext context, List<int?>? values,
+    {bool transparent = false}) {
   return Material(
     clipBehavior: Clip.hardEdge,
     borderRadius: const BorderRadius.all(Radius.circular(12)),
-    color: Theme.of(context).colorScheme.onInverseSurface,
+    color: transparent
+        ? Colors.transparent
+        : Theme.of(context).colorScheme.onInverseSurface,
     child: messageFirstCardRow(
       context,
       values,

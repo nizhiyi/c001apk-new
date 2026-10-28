@@ -9,7 +9,8 @@ import '../utils/markdown_content.dart';
 import '../utils/storage_util.dart';
 import '../utils/utils.dart';
 import 'html_text.dart';
-import 'network_image.dart';
+import 'imageview.dart';
+import '../logic/media/feed_media.dart';
 
 /// Posts opt into Markdown without changing the legacy comment/chat renderer.
 class FeedText extends StatelessWidget {
@@ -18,13 +19,19 @@ class FeedText extends StatelessWidget {
       this.fontSize = 16,
       this.preview = false,
       this.forcePlain = false,
-      this.picArr});
+      this.picArr,
+      this.mediaItems,
+      this.contentId,
+      this.contentType = MediaContentType.feed});
 
   final String source;
   final double fontSize;
   final bool preview;
   final bool forcePlain;
   final List<String>? picArr;
+  final List<FeedMedia>? mediaItems;
+  final String? contentId;
+  final MediaContentType contentType;
 
   @override
   Widget build(BuildContext context) {
@@ -35,7 +42,12 @@ class FeedText extends StatelessWidget {
     final content =
         MarkdownContent.parse(source, showEmoji: GStorage.showEmoji);
     if (!content.isMarkdown) {
-      return htmlText(source, fontSize: fontSize, picArr: picArr);
+      return htmlText(source,
+          fontSize: fontSize,
+          picArr: picArr,
+          mediaItems: mediaItems,
+          contentId: contentId,
+          contentType: contentType);
     }
     if (preview) {
       return Text(content.preview,
@@ -43,7 +55,13 @@ class FeedText extends StatelessWidget {
           overflow: TextOverflow.ellipsis,
           style: TextStyle(fontSize: fontSize, height: 1.5));
     }
-    return MarkdownBody(content: content, fontSize: fontSize, picArr: picArr);
+    return MarkdownBody(
+        content: content,
+        fontSize: fontSize,
+        picArr: picArr,
+        mediaItems: mediaItems,
+        contentId: contentId,
+        contentType: contentType);
   }
 }
 
@@ -54,12 +72,18 @@ class MarkdownBody extends StatelessWidget {
       this.fontSize = 16,
       this.baseUrl,
       this.picArr,
+      this.mediaItems,
+      this.contentId,
+      this.contentType = MediaContentType.feed,
       this.onTapUrl});
 
   final MarkdownContent content;
   final double fontSize;
   final Uri? baseUrl;
   final List<String>? picArr;
+  final List<FeedMedia>? mediaItems;
+  final String? contentId;
+  final MediaContentType contentType;
   final FutureOr<bool> Function(String)? onTapUrl;
 
   @override
@@ -117,10 +141,12 @@ class MarkdownBody extends StatelessWidget {
       if (uri?.host == 'image.coolapk.com' &&
           ['http', 'https'].contains(uri?.scheme)) {
         final images = {...?picArr, ...content.imageUrls, url}.toList();
-        Get.toNamed('/imageview', arguments: {
-          'imgList': images,
-          'initialPage': images.indexOf(url),
-        });
+        Get.toNamed('/imageview',
+            arguments: mediaGalleryArguments(images,
+                mediaItems: mediaItems,
+                contentId: contentId,
+                contentType: contentType,
+                initialPage: images.indexOf(url)));
         return true;
       }
       final resolved = baseUrl?.resolve(url).toString() ?? url;
@@ -167,15 +193,19 @@ class MarkdownBody extends StatelessWidget {
         if (!MarkdownContent.allowsUrl(src, image: true)) {
           return const SizedBox.shrink();
         }
+        final images = {...?picArr, ...content.imageUrls, src}.toList();
+        final arguments = mediaGalleryArguments(images,
+            mediaItems: mediaItems,
+            contentId: contentId,
+            contentType: contentType,
+            initialPage: images.indexOf(src));
+        final media = arguments['mediaItems'] as List<FeedMedia>;
         return Padding(
             padding: const EdgeInsets.symmetric(vertical: 8),
             child: GestureDetector(
-              onTap: () => Get.toNamed('/imageview', arguments: {
-                'imgList': {...?picArr, ...content.imageUrls}.toList(),
-                'initialPage':
-                    {...?picArr, ...content.imageUrls}.toList().indexOf(src),
-              }),
-              child: networkImage(src, fit: BoxFit.contain),
+              onTap: () => Get.toNamed('/imageview', arguments: arguments),
+              child: mediaThumbnail(media[images.indexOf(src)],
+                  fit: BoxFit.contain),
             ));
       }
       return null;

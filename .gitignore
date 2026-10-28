@@ -50,6 +50,7 @@ app.*.map.json
 .local/
 AGENTS.md
 MEMORY.md
+/.private-build-provenance.json
 /更新日志-2026-10-16.md
 
 # Local credentials and signing material
@@ -59,3 +60,11 @@ MEMORY.md
 **/android/key.properties
 *.jks
 *.keystore
+
+# Local maintenance documents; do not publish
+/CONTRIBUTING.md
+/docs/BUILD_VARIANTS.md
+/docs/CONTENT_FILTER.md
+/docs/CONTENT_FILTER_REVIEW_GUIDE.md
+/docs/DEVELOPMENT_STANDARDS.md
+/docs/HDR_LIVE_PHOTO.md

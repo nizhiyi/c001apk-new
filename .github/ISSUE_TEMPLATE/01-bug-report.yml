@@ -1,0 +1,113 @@
+name: 问题反馈
+description: 提交能说明环境、步骤和实际表现的问题。
+title: "[Bug] "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        这是作者个人维护的 vibe coding 项目，优先 Android 与 Windows。提交反馈不等于承诺修复或排期。
+
+        请报告实际测到的现象。其他项目的 issue 只能作为线索，不能代替本项目的复现，也不能直接当作根因结论。
+        对厂商 ROM、旧系统、第三方模块或服务端限制导致的问题，作者可能不提供兼容；系统或上游已有修复时，请优先升级复测。本项目不承诺为个别环境加入影响全体用户的全局兜底。
+        信息不足、重复、无法复现或不在维护范围内的反馈可能直接关闭。
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: 提交前确认
+      options:
+        - label: 我已搜索本仓库已打开和已关闭的 issue，同一问题会在原 issue 补充，不重复提交。
+          required: true
+        - label: 我已使用本仓库提供的最新可用版本复测，并会填写具体版本和来源。
+          required: true
+        - label: 以下排查结果来自实际测试；没测过的内容会写明“未验证”，不凭猜测填写“已排除”。
+          required: true
+        - label: 我已对附件和日志脱敏，不上传密码、Cookie、Token、真实设备标识或私人消息。
+          required: true
+  - type: input
+    id: version
+    attributes:
+      label: 应用版本与构建信息
+      description: 填写完整版本、构建日期或安装包文件名；自行构建请附提交号。
+      placeholder: "版本 + 构建日期 / 安装包文件名 / 提交号"
+    validations:
+      required: true
+  - type: dropdown
+    id: source
+    attributes:
+      label: 安装来源
+      options:
+        - 本仓库 GitHub Releases
+        - 本仓库 GitHub Actions
+        - 本仓库源码自行构建
+        - 其他来源（请说明，并先用本仓库原包复测）
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: 运行平台
+      options:
+        - Android
+        - Windows
+        - Linux
+        - iOS
+        - 其他（请说明）
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: 设备与完整系统版本
+      description: Android 请写厂商 ROM 及完整版本号，不要只写“Android 15”。如使用第三方 ROM、模块或修改版，请如实说明。
+      placeholder: |
+        设备型号：
+        系统 / ROM 完整版本：
+        第三方模块、修改或其他来源说明（无则写无）：
+        相关显示环境（如小窗 / 分屏 / 横屏，或桌面窗口大小、屏幕缩放）：
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      description: 从哪个页面开始、做了什么、在哪一步出现问题？请写成别人能照着操作的步骤。
+      placeholder: |
+        1. 打开……
+        2. 点击 / 切换……
+        3. 出现……
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: 实际表现与预期表现
+      placeholder: |
+        实际发生了什么：
+        预期应该怎样：
+        复现频率（每次 / 偶发 / 只出现一次）：
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: 截图、录屏或脱敏日志
+      description: 提供能展示问题的截图 / 录屏、错误原文、脱敏日志或最小复现；确实无法提供时说明原因。可直接拖入附件。
+    validations:
+      required: true
+  - type: textarea
+    id: investigation
+    attributes:
+      label: 实际做过的排查与对照
+      description: 写清已测试的条件与结果；没测试就写“未验证”，不适用就写“不适用”。只有一台设备也可以反馈，不要求刷机或清空数据。
+      placeholder: |
+        已实际测试的版本 / 设置 / 网络等条件及结果：
+        相关对照（如全屏正常、小窗异常；其他系统或版本是否测试过）：
+        如有系统 / 上游修复版本，升级后是否复测：
+    validations:
+      required: true
+  - type: textarea
+    id: references
+    attributes:
+      label: 相关 issue 或其他线索（选填）
+      description: 可附链接并说明与你的实际表现有哪些相同点、哪些尚未验证。仅贴链接或复制别人的根因分析，不能代替以上信息。

@@ -9,6 +9,8 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../constants/constants.dart';
+import '../constants/liquid_glass_level.dart';
+import '../constants/media_auto_load_mode.dart';
 import '../logic/accounts/account_store.dart';
 import '../logic/model/fav_history/fav_history.dart';
 import '../utils/device_util.dart';
@@ -19,6 +21,18 @@ import 'device_profile.dart';
 import 'official_device_identity.dart';
 
 class GStorage {
+  static MediaAutoLoadMode get mediaAutoLoad =>
+      MediaAutoLoadMode.fromStored(settings.get(SettingsBoxKey.mediaAutoLoad));
+  static bool get hideHomePublishButton =>
+      settings.get(SettingsBoxKey.hideHomePublishButton, defaultValue: true) ==
+      true;
+  static bool get floatingNavigation =>
+      settings.get(SettingsBoxKey.floatingNavigation, defaultValue: true) ==
+      true;
+  static bool get liquidGlass =>
+      settings.get(SettingsBoxKey.liquidGlass, defaultValue: true) == true;
+  static LiquidGlassLevel get liquidGlassLevel => LiquidGlassLevel.fromStored(
+      settings.get(SettingsBoxKey.liquidGlassLevel));
   static late final Box<dynamic> searchHistory;
   static late final Box<dynamic> historyFeed;
   static late final Box<dynamic> favFeed;
@@ -542,8 +556,13 @@ class SettingsBoxKey {
       szlmId = 'szlmId',
       fontScale = 'fontScale',
       readingMode = 'readingMode',
+      hideHomePublishButton = 'hideHomePublishButton',
+      floatingNavigation = 'floatingNavigation',
+      liquidGlass = 'liquidGlass',
+      liquidGlassLevel = 'liquidGlassLevel',
       followType = 'followType',
       imageQuality = 'imageQuality',
+      mediaAutoLoad = MediaAutoLoadMode.storageKey,
       imageDim = 'imageDim',
       openInBrowser = 'openInBrowser',
       showSquare = 'showSquare',

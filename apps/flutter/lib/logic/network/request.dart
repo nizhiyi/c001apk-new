@@ -4,7 +4,6 @@ import 'package:dio/dio.dart';
 import '../../logic/network/interceptor.dart';
 import '../../utils/global_data.dart';
 import '../../utils/storage_util.dart';
-import '../szlm_identity_service.dart';
 import 'captcha_challenge.dart';
 import 'api_session_store.dart';
 import 'api_failure.dart';
@@ -39,9 +38,6 @@ class Request {
     });
     final session =
         (GlobalData().isLogin, GlobalData().uid, GlobalData().token);
-    // A recorded challenge rotates the device identity before this request, so
-    // the headers are signed with the new one instead of the stale one.
-    await SzlmIdentityService.instance.beforeRequest();
     final response = await dio.get(
       url,
       queryParameters: queryParameters,
@@ -84,7 +80,6 @@ class Request {
     // A multipart body becomes finalized during its first send; retain a copy
     // before sending so a server-rejected write can be retried exactly once.
     final retryData = data is FormData ? data.clone() : data;
-    await SzlmIdentityService.instance.beforeRequest();
     final response = await dio.post(
       url,
       data: data,
@@ -140,20 +135,19 @@ class Request {
       Future<Response<dynamic>> Function(String, CaptchaChallenge)
           retry) async {
     final uri = response.requestOptions.uri;
-    if (skip ||
-        generation != GlobalData().sessionGeneration ||
-        _verifying ||
-        captchaVerifier == null ||
+    if (generation != GlobalData().sessionGeneration ||
         session !=
             (GlobalData().isLogin, GlobalData().uid, GlobalData().token) ||
         uri.scheme != 'https' ||
         !['api.coolapk.com', 'api2.coolapk.com'].contains(uri.host)) {
       return response;
     }
-    final challenge = CaptchaChallenge.fromBody(response.data);
-    if (challenge == null) return response;
     final device = response.requestOptions.headers['X-App-Device'];
     if (device != null && device != GStorage.xAppDevice) return response;
+    final challenge = CaptchaChallenge.fromBody(response.data);
+    if (challenge == null) return response;
+    // Verification may ask the user for proof, but never rotates their identity.
+    if (skip || _verifying || captchaVerifier == null) return response;
     final currentProof = ApiInterceptor.currentCaptchaCookie;
     if (challenge.field.isEmpty &&
         currentProof != null &&
@@ -169,9 +163,6 @@ class Request {
       return response;
     }
     final verificationContext = ApiSessionStore().capture();
-    // Opening the verification UI is the only visible sign of a stale device
-    // identity; the next request rotates it once the cooldown allows.
-    SzlmIdentityService.instance.noteChallenge();
     _verifying = true;
     _verificationEpoch++;
     try {

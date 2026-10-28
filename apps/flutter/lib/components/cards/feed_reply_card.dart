@@ -4,9 +4,14 @@ import 'package:get/get.dart';
 import 'package:modal_bottom_sheet/modal_bottom_sheet.dart';
 
 import '../../components/html_text.dart';
+import '../content_filter_gate.dart';
+import '../content_filter_text.dart';
+import '../../logic/content_filter/content_filter_projection.dart';
+import '../../logic/content_filter/content_filter_rule.dart';
 import '../../components/imageview.dart';
 import '../../components/like_button.dart';
 import '../../logic/model/feed/datum.dart';
+import '../../logic/media/feed_media_context.dart';
 import '../../pages/feed/reply2reply/reply_2_reply_page.dart';
 import '../../utils/date_util.dart';
 import '../../utils/extensions.dart';
@@ -37,7 +42,17 @@ class FeedReplyCard extends StatelessWidget {
   final Function(dynamic id, dynamic like)? onLike;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => ContentFilterGate(
+        data: data,
+        scope: FilterScope.comment,
+        builder: _buildVisible,
+        hiddenChildren: !isReply2Reply &&
+                (!data.replyRows.isNullOrEmpty || (data.replyRowsMore ?? 0) > 0)
+            ? _replyRows
+            : null,
+      );
+
+  Widget _buildVisible(BuildContext context) {
     final isFeedReply = data.fetchType == 'feed_reply';
     return Material(
       color: !isFeedReply || (isReply2Reply && !isTopReply)
@@ -58,7 +73,9 @@ class FeedReplyCard extends StatelessWidget {
           }
         },
         onLongPress: () {
-          Get.toNamed('/copy', parameters: {'text': data.message.toString()});
+          Get.toNamed('/copy', parameters: {
+            'text': ContentFilterProjection.displayMessage(data)
+          });
         },
         borderRadius:
             !isFeedReply ? const BorderRadius.all(Radius.circular(12)) : null,
@@ -117,7 +134,15 @@ class FeedReplyCard extends StatelessWidget {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         _username(),
-                        htmlText(data.message.toString()),
+                        ContentFilterText(
+                            key: ValueKey('reply-message:${data.id}'),
+                            source: data.message ?? '',
+                            builder: (message) => htmlText(message,
+                                picArr: data.picArr,
+                                contentId: data.id?.toString(),
+                                contentType: MediaContentType.reply,
+                                mediaItems: mediaForDatum(data,
+                                    type: MediaContentType.reply))),
                         if (!data.picArr.isNullOrEmpty) ...[
                           const SizedBox(height: 10),
                           _image(),
@@ -155,6 +180,9 @@ class FeedReplyCard extends StatelessWidget {
         return image(
           maxWidth,
           data.picArr!,
+          mediaItems: mediaForDatum(data, type: MediaContentType.reply),
+          contentId: data.id?.toString(),
+          contentType: MediaContentType.reply,
         );
       },
     );
@@ -190,6 +218,13 @@ class FeedReplyCard extends StatelessWidget {
 
   Widget _feed(BuildContext context) {
     Datum feed = Datum.fromJson(data.feed);
+    return ContentFilterGate(
+        data: feed,
+        scope: FilterScope.feed,
+        builder: (context) => _feedVisible(context, feed));
+  }
+
+  Widget _feedVisible(BuildContext context, Datum feed) {
     return Material(
       color: Theme.of(context).colorScheme.surface,
       borderRadius: const BorderRadius.all(Radius.circular(12)),
@@ -221,14 +256,16 @@ class FeedReplyCard extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    Text(
-                      Utils.parseHtmlString(feed.message ?? ''),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                          fontSize: 13,
-                          color: Theme.of(context).colorScheme.outline),
-                    ),
+                    ContentFilterText(
+                        source: feed.message ?? '',
+                        builder: (message) => Text(
+                              Utils.parseHtmlString(message),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                  fontSize: 13,
+                                  color: Theme.of(context).colorScheme.outline),
+                            )),
                   ],
                 ),
               ),
@@ -248,7 +285,8 @@ class FeedReplyCard extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          ...data.replyRows!.map((item) => _replyRowsItem(context, item)),
+          ...(data.replyRows ?? <Datum>[])
+              .map((item) => _replyRowsItem(context, item)),
           if (data.replyRowsMore != null && data.replyRowsMore! > 0)
             InkWell(
               onTap: () {
@@ -281,6 +319,13 @@ class FeedReplyCard extends StatelessWidget {
   }
 
   Widget _replyRowsItem(BuildContext context, Datum reply) {
+    return ContentFilterGate(
+        data: reply,
+        scope: FilterScope.comment,
+        builder: (context) => _replyRowsItemVisible(context, reply));
+  }
+
+  Widget _replyRowsItemVisible(BuildContext context, Datum reply) {
     return InkWell(
       onTap: () {
         if (onReply != null) {
@@ -300,7 +345,7 @@ class FeedReplyCard extends StatelessWidget {
             return _MorePanel(
               id: reply.id,
               uid: reply.uid,
-              message: reply.message.toString(),
+              message: ContentFilterProjection.displayMessage(reply),
               fid: data.id,
               reply: reply,
               onBlock:
@@ -315,39 +360,45 @@ class FeedReplyCard extends StatelessWidget {
         width: double.infinity,
         alignment: Alignment.centerLeft,
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        child: htmlText(
-          () {
-            String replyTag = reply.uid == data.feedUid
-                ? ' [楼主] '
-                : reply.uid == data.uid
-                    ? ' [层主] '
-                    : '';
-            String rReplyTag = reply.ruid == data.feedUid
-                ? ' [楼主] '
-                : reply.ruid == data.uid
-                    ? ' [层主] '
-                    : '';
-            String rReplyUser = reply.ruid == data.uid
-                ? ''
-                : '<a class="feed-link-uname" href="/u/${reply.ruid}">${reply.rusername}$rReplyTag</a>';
-            String replyPic = reply.picArr.isNullOrEmpty
-                ? ''
-                : ' <a class="feed-forward-pic" href=${reply.pic}>查看图片(${reply.picArr!.length})</a>';
-            return '<a class="feed-link-uname" href="/u/${reply.uid}">${reply.userInfo?.username}$replyTag</a>回复$rReplyUser: ${reply.message}$replyPic';
-          }(),
-          fontSize: 14,
-          onShowTotalReply: () => showCupertinoModalBottomSheet(
-            context: context,
-            builder: (context) {
-              return Reply2ReplyPage(
-                id: data.id.toString(),
-                replynum: data.replynum,
-                originReply: data,
-              );
-            },
-          ),
-          picArr: reply.picArr,
-        ),
+        child: ContentFilterText(
+            source: reply.message ?? '',
+            builder: (message) => htmlText(
+                  () {
+                    String replyTag = reply.uid == data.feedUid
+                        ? ' [楼主] '
+                        : reply.uid == data.uid
+                            ? ' [层主] '
+                            : '';
+                    String rReplyTag = reply.ruid == data.feedUid
+                        ? ' [楼主] '
+                        : reply.ruid == data.uid
+                            ? ' [层主] '
+                            : '';
+                    String rReplyUser = reply.ruid == data.uid
+                        ? ''
+                        : '<a class="feed-link-uname" href="/u/${reply.ruid}">${reply.rusername}$rReplyTag</a>';
+                    String replyPic = reply.picArr.isNullOrEmpty
+                        ? ''
+                        : ' <a class="feed-forward-pic" href=${reply.pic}>查看图片(${reply.picArr!.length})</a>';
+                    return '<a class="feed-link-uname" href="/u/${reply.uid}">${reply.userInfo?.username}$replyTag</a>回复$rReplyUser: $message$replyPic';
+                  }(),
+                  fontSize: 14,
+                  onShowTotalReply: () => showCupertinoModalBottomSheet(
+                    context: context,
+                    builder: (context) {
+                      return Reply2ReplyPage(
+                        id: data.id.toString(),
+                        replynum: data.replynum,
+                        originReply: data,
+                      );
+                    },
+                  ),
+                  picArr: reply.picArr,
+                  mediaItems:
+                      mediaForDatum(reply, type: MediaContentType.reply),
+                  contentId: reply.id?.toString(),
+                  contentType: MediaContentType.reply,
+                )),
       ),
     );
   }

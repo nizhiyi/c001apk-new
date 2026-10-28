@@ -9,6 +9,8 @@ import '../../pages/common/common_controller.dart';
 import '../../utils/global_data.dart';
 
 class NotificationController extends CommonController {
+  @override
+  bool get supportsContentFilter => false;
   NotificationController({
     required this.url,
   });

@@ -8,14 +8,19 @@ import 'package:c001apk_flutter/pages/message/message_controller.dart';
 import 'package:c001apk_flutter/pages/local_follow/local_follow_page.dart';
 import 'package:c001apk_flutter/constants/constants.dart';
 import 'package:c001apk_flutter/main.dart';
+import 'package:c001apk_flutter/components/adaptive_main_scaffold.dart';
+import 'package:c001apk_flutter/components/liquid_navigation_bar.dart';
 import 'package:c001apk_flutter/pages/settings/settings_page.dart';
 import 'package:c001apk_flutter/components/settings/drop_down_menu_item.dart';
 import 'package:c001apk_flutter/components/cards/feed_card.dart';
+import 'package:c001apk_flutter/components/cards/message_header_card.dart';
+import 'package:c001apk_flutter/components/feed_navigation.dart';
 import 'package:c001apk_flutter/components/cards/carousel_card.dart';
 import 'package:c001apk_flutter/components/cards/icon_link_grid_card.dart';
 import 'package:c001apk_flutter/components/cards/icon_mini_scroll_card.dart';
 import 'package:c001apk_flutter/pages/home/feed/home_feed_page.dart';
 import 'package:c001apk_flutter/pages/feed/feed_page.dart';
+import 'package:c001apk_flutter/pages/feed/reply/reply_page.dart';
 import 'package:c001apk_flutter/logic/model/feed/datum.dart';
 import 'package:c001apk_flutter/utils/global_data.dart';
 import 'package:c001apk_flutter/utils/storage_util.dart';
@@ -24,11 +29,48 @@ import 'package:dio/dio.dart';
 import 'package:dynamic_color/samples.dart';
 import 'package:dynamic_color/test_utils.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get/get.dart';
 import 'package:hive/hive.dart';
+
+// Exercise the currently selected navigation style through its user-facing target.
+Finder mainDestination(String label) {
+  if (find
+      .byWidgetPredicate(
+          (widget) => widget is LiquidNavigationBar && !widget.tabs)
+      .evaluate()
+      .isNotEmpty) {
+    return find.byWidgetPredicate((widget) =>
+        widget is Semantics &&
+        widget.properties.label == label &&
+        widget.properties.button == true);
+  }
+  if (find.byType(NavigationRail).evaluate().isNotEmpty) {
+    return find.descendant(
+        of: find.byType(NavigationRail), matching: find.text(label));
+  }
+  return find.widgetWithText(NavigationDestination, label);
+}
+
+int mainSelectedIndex(WidgetTester tester) => tester
+    .widget<AdaptiveMainScaffold>(find.byType(AdaptiveMainScaffold))
+    .selectedIndex;
+
+Finder mainBottomNavigation() => find.byWidgetPredicate((widget) =>
+    (widget is LiquidNavigationBar && !widget.tabs) || widget is NavigationBar);
+
+Finder homeCategory(String label) {
+  final glass = find.byKey(const ValueKey('liquid-tabs-surface'));
+  return glass.evaluate().isEmpty
+      ? find.widgetWithText(Tab, label)
+      : find.descendant(
+          of: glass,
+          matching: find.byWidgetPredicate((widget) =>
+              widget is Semantics && widget.properties.label == label));
+}
 
 class EmptyGuestAdapter implements HttpClientAdapter {
   bool showHomeCards = false;
@@ -295,22 +337,116 @@ void main() {
     await temp.delete(recursive: true);
   });
 
+  testWidgets('the auxiliary feed limits long plain posts to compact summaries',
+      (tester) async {
+    final message = List.filled(80, '这是一段用于检查辅助栏阅读密度的长正文。').join();
+    await tester.pumpWidget(GetMaterialApp(
+        home: Scaffold(
+            body: Align(
+      alignment: Alignment.topCenter,
+      child: SizedBox(
+          width: 280,
+          child: FeedNavigation(
+            openFeed: (_) => true,
+            selectedId: null,
+            compact: true,
+            child: FeedCard(
+                data: Datum.fromJson(
+                    {...EmptyGuestAdapter.feed, 'message': message})),
+          )),
+    ))));
+    await tester.pumpAndSettle();
+    expect(tester.getSize(find.byType(FeedCard)).height, lessThan(280));
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets(
+      'choosing a main destination discards the previous forward branch',
+      (tester) async {
+    tester.view.physicalSize = const Size(400, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    Request.dio.httpClientAdapter = EmptyGuestAdapter();
+    await tester.pumpWidget(const C001APKAPP());
+    await tester.pumpAndSettle();
+    Get.toNamed('/about');
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(Get.currentRoute, '/');
+    await tester.tap(mainDestination('关注'));
+    await tester.pumpAndSettle();
+    await tester.tapAt(const Offset(200, 200),
+        kind: PointerDeviceKind.mouse, buttons: kForwardMouseButton);
+    await tester.pumpAndSettle();
+    expect(Get.currentRoute, '/');
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('home glass selects categories and keeps selection across styles',
+      (tester) async {
+    tester.view.physicalSize = const Size(400, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    Request.dio.httpClientAdapter = EmptyGuestAdapter();
+    await tester.pumpWidget(const C001APKAPP());
+    await tester.pumpAndSettle();
+    final controller =
+        tester.widget<TabBarView>(find.byType(TabBarView).first).controller!;
+    await tester.tap(homeCategory('酷图'));
+    await tester.pumpAndSettle();
+    expect(controller.index, controller.length - 1);
+    await tester.runAsync(
+        () => GStorage.settings.put(SettingsBoxKey.liquidGlass, false));
+    await tester.pumpAndSettle();
+    expect(find.byType(TabBar), findsOneWidget);
+    expect(controller.index, controller.length - 1);
+    await tester.runAsync(
+        () => GStorage.settings.put(SettingsBoxKey.liquidGlass, true));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('liquid-tabs-surface')), findsOneWidget);
+    expect(controller.index, controller.length - 1);
+    await tester.tap(mainDestination('关注'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('glass-search')), findsOneWidget);
+    expect(find.byTooltip('搜索'), findsOneWidget);
+    await tester.tap(mainDestination('我的'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('glass-top-title')), findsOneWidget);
+    expect(find.byTooltip('设置'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   for (final kind in [PointerDeviceKind.mouse, PointerDeviceKind.touch]) {
     for (final surface in ['tabs', 'carousel', 'grid', 'chips']) {
       testWidgets('home $surface accepts ${kind.name} dragging',
           (tester) async {
-        tester.view.physicalSize = const Size(400, 900);
+        // The compact toolbar can fit the five host-platform tabs at 400dp.
+        // Use a genuinely overflowing viewport to verify both drag inputs.
+        tester.view.physicalSize = Size(surface == 'tabs' ? 320 : 400, 900);
         tester.view.devicePixelRatio = 1;
         addTearDown(tester.view.resetPhysicalSize);
         addTearDown(tester.view.resetDevicePixelRatio);
         Request.dio.httpClientAdapter = EmptyGuestAdapter()
           ..showHomeCards = true;
+        // The standard toolbar still scrolls when glass is disabled. The
+        // glass toolbar now drags the selected droplet, like the bottom bar.
+        if (surface == 'tabs') {
+          await tester.runAsync(
+              () => GStorage.settings.put(SettingsBoxKey.liquidGlass, false));
+          addTearDown(
+              () => GStorage.settings.put(SettingsBoxKey.liquidGlass, true));
+        }
         await tester.pumpWidget(const C001APKAPP());
         await tester.pumpAndSettle();
-        final tabs = find.byType(TabBar).first;
-        final homeTabs = tester.widget<TabBar>(tabs).controller!;
+        final homeTabs = tester
+            .widget<TabBarView>(find.byType(TabBarView).first)
+            .controller!;
         final target = switch (surface) {
-          'tabs' => tabs,
+          'tabs' => find.byType(TabBar).first,
           'carousel' => find.byType(CarouselCard),
           'grid' => find.byType(IconLinkGridCard),
           _ => find.byType(IconMiniScrollCard),
@@ -333,7 +469,7 @@ void main() {
         await tester.drag(target, const Offset(260, 0), kind: kind);
         await tester.pumpAndSettle();
         expect(position.pixels, closeTo(before, 2));
-        await tester.tap(find.widgetWithText(Tab, '热门'));
+        await tester.tap(homeCategory('热门'));
         await tester.pumpAndSettle();
         expect(homeTabs.index, initialTab + 1);
         await tester.pumpWidget(const SizedBox.shrink());
@@ -403,11 +539,9 @@ void main() {
     await tester.pumpWidget(const C001APKAPP());
     await tester.pumpAndSettle();
     for (final destination in ['主页', '关注', '我的']) {
-      await tester.tap(find.widgetWithText(NavigationDestination, destination));
+      await tester.tap(mainDestination(destination));
       await tester.pumpAndSettle();
-      final selected = tester
-          .widget<NavigationBar>(find.byType(NavigationBar))
-          .selectedIndex;
+      final selected = mainSelectedIndex(tester);
       await tester.sendKeyDownEvent(LogicalKeyboardKey.escape);
       await tester.pumpAndSettle();
       expect(find.text('退出 c001apk？'), findsOneWidget);
@@ -419,11 +553,7 @@ void main() {
       await tester.sendKeyEvent(LogicalKeyboardKey.escape);
       await tester.pumpAndSettle();
       expect(find.byType(AlertDialog), findsNothing);
-      expect(
-          tester
-              .widget<NavigationBar>(find.byType(NavigationBar))
-              .selectedIndex,
-          selected);
+      expect(mainSelectedIndex(tester), selected);
       await tester.sendKeyEvent(LogicalKeyboardKey.escape);
       await tester.pumpAndSettle();
       await tester.tap(find.text('取消'));
@@ -464,7 +594,7 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pumpAndSettle();
     expect(find.byType(SettingsPage), findsNothing);
-    expect(find.text('主页'), findsOneWidget);
+    expect(mainDestination('主页'), findsOneWidget);
     expect(find.byType(AlertDialog), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
   });
@@ -501,15 +631,15 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
     await tester.pumpAndSettle();
     expect(homePosition.pixels, closeTo(0, 1));
-    await tester.tap(find.widgetWithText(Tab, '热门'));
+    await tester.tap(homeCategory('热门'));
     await tester.pumpAndSettle();
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await tester.pumpAndSettle();
     expect(homePosition.pixels, closeTo(0, 1),
         reason: 'An inactive home tab must not scroll');
-    await tester.tap(find.widgetWithText(Tab, '动态'));
+    await tester.tap(homeCategory('动态'));
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(NavigationDestination, '我的'));
+    await tester.tap(mainDestination('我的'));
     await tester.pumpAndSettle();
     final myList = find
         .descendant(
@@ -522,7 +652,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(myPosition.pixels, greaterThan(0));
     expect(homePosition.pixels, closeTo(0, 1));
-    await tester.tap(find.widgetWithText(NavigationDestination, '主页'));
+    await tester.tap(mainDestination('主页'));
     await tester.pumpAndSettle();
     final controller = ScrollController();
     final editor = TextEditingController(text: '第一行\n第二行');
@@ -591,22 +721,18 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(const C001APKAPP());
     await tester.pump(const Duration(milliseconds: 500));
-    final context = tester.element(find.byType(NavigationBar));
+    final context = tester.element(find.byType(AdaptiveMainScaffold));
     expect(Localizations.localeOf(context), const Locale('zh', 'CN'));
     final material = MaterialLocalizations.of(context);
     expect(material.backButtonTooltip, '返回');
     expect(material.copyButtonLabel, '复制');
     expect(material.pasteButtonLabel, '粘贴');
-    expect(find.text('主页'), findsOneWidget);
-    expect(
-        tester
-            .widget<NavigationBar>(find.byType(NavigationBar))
-            .destinations
-            .cast<NavigationDestination>()
-            .map((item) => item.label),
-        ['主页', '关注', '我的']);
+    expect(mainDestination('主页'), findsOneWidget);
+    for (final label in ['主页', '关注', '我的']) {
+      expect(mainDestination(label), findsOneWidget);
+    }
     expect(find.widgetWithText(Tab, '关注'), findsNothing);
-    await tester.tap(find.widgetWithText(NavigationDestination, '关注'));
+    await tester.tap(mainDestination('关注'));
     await tester.pumpAndSettle();
     expect(find.text('本地关注动态'), findsOneWidget);
     expect(find.textContaining('还没有本地关注的用户'), findsOneWidget);
@@ -614,7 +740,7 @@ void main() {
     tester.view.physicalSize = const Size(1400, 900);
     await tester.pump(const Duration(milliseconds: 500));
     expect(find.byType(NavigationRail), findsOneWidget);
-    expect(find.text('主页'), findsOneWidget);
+    expect(mainDestination('主页'), findsOneWidget);
     expect(
         tester
             .widget<NavigationRail>(find.byType(NavigationRail))
@@ -634,10 +760,10 @@ void main() {
     expect(find.text('粉丝', skipOffstage: false), findsNothing);
     final localCard = find
         .ancestor(of: find.text('本地收藏'), matching: find.byType(Material))
-        .last;
-    final divider = find.byType(Divider).first;
-    expect(tester.getTopLeft(localCard).dy - tester.getBottomLeft(divider).dy,
-        lessThan(20));
+        .first;
+    final profile = find.byType(MessageHeaderCard);
+    expect(tester.getTopLeft(localCard).dy - tester.getBottomLeft(profile).dy,
+        inInclusiveRange(0, 24));
     expect(find.text('Settings'), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
   });
@@ -651,20 +777,15 @@ void main() {
     await tester.pumpWidget(const C001APKAPP());
     await tester.pumpAndSettle();
     for (final destination in ['主页', '关注', '我的']) {
-      await tester.tap(find.widgetWithText(NavigationDestination, destination));
+      await tester.tap(mainDestination(destination));
       await tester.pumpAndSettle();
-      final selected = tester
-          .widget<NavigationBar>(find.byType(NavigationBar))
-          .selectedIndex;
-      final route = ModalRoute.of(tester.element(find.byType(NavigationBar)))!;
+      final selected = mainSelectedIndex(tester);
+      final route =
+          ModalRoute.of(tester.element(find.byType(AdaptiveMainScaffold)))!;
       expect(route.popDisposition, RoutePopDisposition.bubble);
       await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();
-      expect(
-          tester
-              .widget<NavigationBar>(find.byType(NavigationBar))
-              .selectedIndex,
-          selected);
+      expect(mainSelectedIndex(tester), selected);
     }
     await tester.pumpWidget(const SizedBox.shrink());
   });
@@ -711,7 +832,7 @@ void main() {
     await event('commitBackGesture', 0.5);
     await tester.pumpAndSettle();
     expect(find.byType(SettingsDetailPage), findsNothing);
-    expect(find.byType(NavigationBar), findsOneWidget);
+    expect(mainBottomNavigation(), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
@@ -760,7 +881,7 @@ void main() {
         uid: '321', username: 'synthetic', token: 'synthetic-token'));
     await tester.pumpWidget(const C001APKAPP());
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(NavigationDestination, '我的'));
+    await tester.tap(mainDestination('我的'));
     await tester.pumpAndSettle();
     expect(find.textContaining('合成系统信息', findRichText: true), findsNothing);
     expect(adapter.notificationPages, isEmpty);
@@ -793,7 +914,8 @@ void main() {
     await finishIo(tester, () => AccountStore().useGuest());
   });
 
-  testWidgets('guest inbox keeps c001apk assistant reachable without account notices',
+  testWidgets(
+      'guest inbox keeps c001apk assistant reachable without account notices',
       (tester) async {
     tester.view.physicalSize = const Size(500, 1000);
     tester.view.devicePixelRatio = 1;
@@ -804,7 +926,7 @@ void main() {
     await tester.runAsync(() => AccountStore().useGuest());
     await tester.pumpWidget(const C001APKAPP());
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(NavigationDestination, '我的'));
+    await tester.tap(mainDestination('我的'));
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('私信与信息'));
     await tester.tap(find.text('私信与信息'));
@@ -829,7 +951,7 @@ void main() {
         }));
     await tester.pumpWidget(const C001APKAPP());
     await tester.pump(const Duration(milliseconds: 500));
-    await tester.tap(find.widgetWithText(NavigationDestination, '我的'));
+    await tester.tap(mainDestination('我的'));
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('设置'));
     await tester.pumpAndSettle();
@@ -1111,7 +1233,7 @@ void main() {
         token: 'synthetic-current-token'));
     await tester.pumpWidget(const C001APKAPP());
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(NavigationDestination, '关注'));
+    await tester.tap(mainDestination('关注'));
     await tester.pumpAndSettle();
     expect(find.text('用户关注'), findsOneWidget);
     await tester.tap(find.byTooltip('切换关注内容'));
@@ -1122,7 +1244,7 @@ void main() {
     await finishIo(tester, () => GStorage.settings.flush());
     await tester.pumpAndSettle();
     expect(find.text('悄悄关注动态'), findsOneWidget);
-    await tester.tap(find.widgetWithText(NavigationDestination, '我的'));
+    await tester.tap(mainDestination('我的'));
     await tester.pumpAndSettle();
     final oldController = Get.find<MessageController>();
     oldController.firstList.value = [7, 8, 9];
@@ -1177,7 +1299,7 @@ void main() {
     });
     await tester.pumpWidget(const C001APKAPP());
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(NavigationDestination, '关注'));
+    await tester.tap(mainDestination('关注'));
     await tester.pumpAndSettle();
     expect(adapter.followRequests.first['url'],
         '/page?url=V9_HOME_TAB_FOLLOW&type=circle');
@@ -1236,7 +1358,7 @@ void main() {
     });
     await tester.pumpWidget(const C001APKAPP());
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(NavigationDestination, '关注'));
+    await tester.tap(mainDestination('关注'));
     await tester.pumpAndSettle();
     Future<void> select(String label, {bool settle = true}) async {
       await tester.tap(find.byTooltip('切换关注内容'));
@@ -1264,12 +1386,161 @@ void main() {
     Get.reset();
     await tester.pumpWidget(const C001APKAPP());
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(NavigationDestination, '关注'));
+    await tester.tap(mainDestination('关注'));
     await tester.pumpAndSettle();
     expect(find.text('悄悄关注动态'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
     await finishIo(tester, () async {
       await GStorage.settings.delete('followFeedSelectionV1');
+      await AccountStore().useGuest();
+    });
+  });
+
+  testWidgets(
+      'publish follows the active feed between floating and rail layouts',
+      (tester) async {
+    tester.view.physicalSize = const Size(400, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    Request.dio.httpClientAdapter = EmptyGuestAdapter()..showHomeCards = true;
+    await tester.runAsync(() async {
+      await GStorage.settings
+          .putAll({'floatingNavigation': true, 'liquidGlass': true});
+      await GStorage.settings.delete('hideHomePublishButton');
+      await AccountStore().saveLogin(
+          uid: '321', username: 'synthetic', token: 'synthetic-token');
+    });
+    await tester.pumpWidget(const C001APKAPP());
+    await tester.pumpAndSettle();
+    final publish = find.byTooltip('发布动态');
+    expect(publish, findsNothing);
+    await finishIo(
+        tester, () => GStorage.settings.put('hideHomePublishButton', false));
+    await tester.pumpAndSettle();
+    expect(publish, findsOneWidget);
+    expect(tester.getSize(publish), const Size(52, 52));
+    final bar =
+        tester.getRect(find.byKey(const ValueKey('liquid-drag-surface')));
+    expect(tester.getRect(publish).bottom, lessThanOrEqualTo(bar.top - 12));
+    final feed = find.byType(HomeFeedPage).first;
+    final scroll =
+        find.descendant(of: feed, matching: find.byType(Scrollable)).first;
+    final position = tester.state<ScrollableState>(scroll).position;
+    await tester.drag(scroll, const Offset(0, -350));
+    await tester.pumpAndSettle();
+    expect(publish, findsNothing);
+    tester.view.physicalSize = const Size(1280, 800);
+    await tester.pumpAndSettle();
+    expect(publish, findsNothing, reason: 'hidden state survives widening');
+    await tester.drag(scroll, const Offset(0, 180));
+    await tester.pumpAndSettle();
+    expect(publish, findsOneWidget);
+    expect(find.descendant(of: find.byType(NavigationRail), matching: publish),
+        findsOneWidget);
+    expect(tester.getRect(publish).bottom, greaterThan(700));
+    expect(tester.state<ScrollableState>(scroll).position, same(position));
+    await tester.tap(publish);
+    await tester.pumpAndSettle();
+    expect(find.byType(ReplyPage), findsOneWidget);
+    Get.back();
+    await tester.pumpAndSettle();
+    await tester.tap(homeCategory('热门'));
+    await tester.pumpAndSettle();
+    expect(publish, findsNothing);
+    await tester.tap(homeCategory('动态'));
+    await tester.pumpAndSettle();
+    expect(publish, findsOneWidget);
+    await tester.tap(mainDestination('关注'));
+    await tester.pumpAndSettle();
+    expect(publish, findsNothing);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await finishIo(tester, () async {
+      await AccountStore().useGuest();
+      await GStorage.settings.delete('hideHomePublishButton');
+    });
+  });
+
+  testWidgets('follow floating capsules hug the title and glaze the whole menu',
+      (tester) async {
+    tester.view.physicalSize = const Size(400, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    Request.dio.httpClientAdapter = EmptyGuestAdapter();
+    await tester.runAsync(() async {
+      await GStorage.settings.putAll({
+        'floatingNavigation': true,
+        'liquidGlass': true,
+        'followFeedSelectionV1': 1
+      });
+      await AccountStore().saveLogin(
+          uid: '321', username: 'synthetic', token: 'synthetic-token');
+    });
+    await tester.pumpWidget(const C001APKAPP());
+    await tester.pumpAndSettle();
+    await tester.tap(mainDestination('关注'));
+    await tester.pumpAndSettle();
+    final title = find.byTooltip('切换关注内容');
+    final search = find.byKey(const ValueKey('glass-search'));
+    expect(search, findsOneWidget);
+    final titleRect = tester.getRect(title);
+    expect(titleRect.width, lessThan(180));
+    expect(
+        tester
+            .renderObject<RenderParagraph>(find.text('用户关注'))
+            .didExceedMaxLines,
+        isFalse);
+    expect(tester.getRect(search).left - titleRect.right, greaterThan(60));
+    final appbar = tester.widget<AppBar>(find.descendant(
+        of: find.byType(FollowFeedPage), matching: find.byType(AppBar)));
+    expect(appbar.forceMaterialTransparency, isTrue);
+    tester.view.physicalSize = const Size(1280, 800);
+    await tester.pumpAndSettle();
+    expect(tester.getRect(search).right, greaterThan(1240));
+    tester.view.physicalSize = const Size(400, 800);
+    await tester.pumpAndSettle();
+    await tester.tap(title);
+    await tester.pumpAndSettle();
+    final panel = find.byKey(const ValueKey('glass-popup-panel'));
+    expect(panel, findsOneWidget);
+    expect(find.descendant(of: panel, matching: find.byType(GlassSurface)),
+        findsOneWidget);
+    await tester.tap(
+        find.widgetWithText(CheckedPopupMenuItem<FollowFeedSelection>, '话题关注'));
+    await tester.pumpAndSettle();
+    await finishIo(tester, () => GStorage.settings.flush());
+    expect(GStorage.settings.get('followFeedSelectionV1'), 2);
+    await tester.tap(title);
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(panel, findsNothing);
+    await finishIo(tester, () => GStorage.settings.put('liquidGlass', false));
+    await tester.pumpAndSettle();
+    expect(search, findsOneWidget,
+        reason: 'floating layout is independent of glass');
+    await tester.tap(title);
+    await tester.pumpAndSettle();
+    expect(find.byType(BackdropFilter), findsNothing);
+    await tester.tapAt(const Offset(390, 500));
+    await tester.pumpAndSettle();
+    await finishIo(
+        tester, () => GStorage.settings.put('floatingNavigation', false));
+    await tester.pumpAndSettle();
+    expect(search, findsNothing);
+    await tester.tap(title);
+    await tester.pumpAndSettle();
+    expect(panel, findsNothing);
+    expect(find.byType(CheckedPopupMenuItem<FollowFeedSelection>),
+        findsNWidgets(6));
+    Get.back();
+    await tester.pumpAndSettle();
+    await tester.pumpWidget(const SizedBox.shrink());
+    await finishIo(tester, () async {
+      await GStorage.settings.delete('followFeedSelectionV1');
+      await GStorage.settings
+          .putAll({'floatingNavigation': true, 'liquidGlass': true});
       await AccountStore().useGuest();
     });
   });

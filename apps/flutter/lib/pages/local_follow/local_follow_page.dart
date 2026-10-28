@@ -1,9 +1,13 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:get/get.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 
 import '../../components/common_body.dart';
+import '../../components/liquid_top_bar.dart';
+import '../../components/liquid_popup_menu.dart';
 import '../../components/network_image.dart';
 import '../../logic/local_follow/local_follow_store.dart';
 import '../../utils/global_data.dart';
@@ -61,63 +65,92 @@ class _FollowFeedPageState extends State<FollowFeedPage>
   @override
   bool get wantKeepAlive => true;
 
+  List<PopupMenuEntry<FollowFeedSelection>> _menuItems() => [
+        const PopupMenuItem<FollowFeedSelection>(
+            enabled: false, height: 32, child: Text('账号关注')),
+        for (final item in FollowFeedSelection.values) ...[
+          if (item == FollowFeedSelection.local) const PopupMenuDivider(),
+          CheckedPopupMenuItem(
+              value: item,
+              checked: item == _selection,
+              child: Text(item.label)),
+        ],
+      ];
+
+  Widget _label() => Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Flexible(
+              child: Text(_selection.label,
+                  style: Theme.of(context).textTheme.titleLarge,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis)),
+          const Icon(Icons.arrow_drop_down),
+        ]),
+      );
+
+  double _titleWidth(BuildContext context, String label, {bool arrow = true}) {
+    final painter = TextPainter(
+        text: TextSpan(
+            text: label, style: Theme.of(context).textTheme.titleLarge),
+        textScaler: MediaQuery.textScalerOf(context),
+        textDirection: Directionality.of(context))
+      ..layout();
+    final width = painter.width + (arrow ? 56 : 40);
+    painter.dispose();
+    return width;
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
     return ValueListenableBuilder(
       valueListenable:
           GStorage.settings.listenable(keys: [SettingsBoxKey.isLogin]),
-      builder: (context, _, __) => Scaffold(
-        appBar: AppBar(
-          automaticallyImplyLeading: false,
-          titleSpacing: 8,
-          title: GlobalData().isLogin
-              ? PopupMenuButton<FollowFeedSelection>(
-                  tooltip: '切换关注内容',
-                  initialValue: _selection,
-                  position: PopupMenuPosition.under,
-                  onSelected: _select,
-                  itemBuilder: (context) => [
-                    const PopupMenuItem<FollowFeedSelection>(
-                      enabled: false,
-                      height: 32,
-                      child: Text('账号关注'),
-                    ),
-                    for (final item in FollowFeedSelection.values) ...[
-                      if (item == FollowFeedSelection.local)
-                        const PopupMenuDivider(),
-                      CheckedPopupMenuItem(
-                        value: item,
-                        checked: item == _selection,
-                        child: Text(item.label),
-                      ),
-                    ],
-                  ],
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(minHeight: 48),
-                      child: Row(mainAxisSize: MainAxisSize.min, children: [
-                        Flexible(
-                          child: Text(_selection.label,
-                              maxLines: 1, overflow: TextOverflow.ellipsis),
-                        ),
-                        const Icon(Icons.arrow_drop_down),
-                      ]),
-                    ),
-                  ),
-                )
-              : const Text('本地关注'),
-          actions: [
-            IconButton(
-              onPressed: () => Get.toNamed('/search'),
-              icon: const Icon(Icons.search),
-              tooltip: '搜索',
-            ),
-          ],
-        ),
+      builder: (context, _, __) => LiquidTopBarScaffold(
+        compactTitle: true,
+        floatWithoutGlass: true,
+        glassTitle: (context) => GlobalData().isLogin
+            ? LiquidPopupMenuButton<FollowFeedSelection>(
+                height:
+                    math.max(48, MediaQuery.textScalerOf(context).scale(20)),
+                width: _titleWidth(context, _selection.label),
+                tooltip: '切换关注内容',
+                items: _menuItems(),
+                onSelected: _select,
+                child: _label())
+            : Align(
+                alignment: Alignment.centerLeft,
+                child: LiquidGlassButton(
+                    height: math.max(
+                        48, MediaQuery.textScalerOf(context).scale(20)),
+                    width: _titleWidth(context, '本地关注', arrow: false),
+                    enabled: GStorage.liquidGlass,
+                    level: GStorage.liquidGlassLevel,
+                    tooltip: '本地关注',
+                    onPressed: null,
+                    child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Center(
+                            child: Text('本地关注',
+                                style:
+                                    Theme.of(context).textTheme.titleLarge))))),
+        titleSpacing: 8,
+        title: GlobalData().isLogin
+            ? PopupMenuButton<FollowFeedSelection>(
+                tooltip: '切换关注内容',
+                initialValue: _selection,
+                position: PopupMenuPosition.under,
+                onSelected: _select,
+                itemBuilder: (context) => _menuItems(),
+                child: ConstrainedBox(
+                    constraints: const BoxConstraints(minHeight: 48),
+                    child: _label()),
+              )
+            : const Text('本地关注'),
+        onSearch: () => Get.toNamed('/search'),
         body: !GlobalData().isLogin || _selection == FollowFeedSelection.local
-            ? const LocalFollowFeedView()
+            ? const SafeArea(bottom: false, child: LocalFollowFeedView())
             : HomeFeedPage(
                 key: ValueKey(_selection),
                 tabType: TabType.FOLLOW,

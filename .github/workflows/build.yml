@@ -6,10 +6,14 @@ on:
     paths:
       - 'apps/flutter/**'
       - '.github/workflows/**'
+      - '.github/actions/**'
+      - 'private-extensions.lock.json'
   pull_request:
     paths:
       - 'apps/flutter/**'
       - '.github/workflows/**'
+      - '.github/actions/**'
+      - 'private-extensions.lock.json'
   workflow_dispatch:
     inputs:
       android_release:
@@ -20,6 +24,11 @@ on:
         description: 'Also build an unsigned iOS arm64 IPA (requires your own signing)'
         type: boolean
         default: false
+      implementation:
+        description: 'Official private implementation or public basic implementation'
+        type: choice
+        options: [official, public]
+        default: official
 
 permissions:
   contents: read
@@ -30,6 +39,7 @@ concurrency:
 
 env:
   FLUTTER_VERSION: '3.47.7'
+  USE_PRIVATE_EXTENSIONS: ${{ github.repository == 'TG-Twilight/c001apk' && github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && (github.event_name != 'workflow_dispatch' || inputs.implementation != 'public') }}
 
 defaults:
   run:
@@ -46,6 +56,9 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
+      - name: Validate official build branch
+        if: github.repository == 'TG-Twilight/c001apk' && github.event_name == 'workflow_dispatch' && inputs.implementation != 'public' && github.ref != 'refs/heads/main'
+        run: echo 'Official implementation builds require the main branch'; exit 1
       - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
@@ -55,6 +68,11 @@ jobs:
         id: version
         run: dart tool/update_build_date.dart
       - run: flutter pub get --enforce-lockfile
+      - name: Assemble official implementation
+        if: env.USE_PRIVATE_EXTENSIONS == 'true'
+        uses: ./.github/actions/private-extensions
+        with:
+          private-key: ${{ secrets.PRIVATE_EXTENSIONS_DEPLOY_KEY }}
       - name: Analyze (errors and warnings fail; existing info lints remain visible)
         run: flutter analyze --no-pub --no-fatal-infos
       - name: Offline regression tests
@@ -90,6 +108,11 @@ jobs:
       - name: Sync build date
         run: dart tool/update_build_date.dart ${{ needs.checks.outputs.build_date }}
       - run: flutter pub get --enforce-lockfile
+      - name: Assemble official implementation
+        if: env.USE_PRIVATE_EXTENSIONS == 'true'
+        uses: ./.github/actions/private-extensions
+        with:
+          private-key: ${{ secrets.PRIVATE_EXTENSIONS_DEPLOY_KEY }}
       - run: flutter build ${{ matrix.platform }} --release --no-pub
       - name: Package Windows runtime
         if: runner.os == 'Windows'
@@ -167,6 +190,11 @@ jobs:
       - name: Sync build date
         run: dart tool/update_build_date.dart ${{ needs.checks.outputs.build_date }}
       - run: flutter pub get --enforce-lockfile
+      - name: Assemble official implementation
+        if: env.USE_PRIVATE_EXTENSIONS == 'true'
+        uses: ./.github/actions/private-extensions
+        with:
+          private-key: ${{ secrets.PRIVATE_EXTENSIONS_DEPLOY_KEY }}
       - name: Restore and verify project keystore
         env:
           KEYSTORE: ${{ runner.temp }}/c001apk-signing/release.jks
@@ -239,6 +267,11 @@ jobs:
       - name: Sync build date
         run: dart tool/update_build_date.dart ${{ needs.checks.outputs.build_date }}
       - run: flutter pub get --enforce-lockfile
+      - name: Assemble official implementation
+        if: env.USE_PRIVATE_EXTENSIONS == 'true'
+        uses: ./.github/actions/private-extensions
+        with:
+          private-key: ${{ secrets.PRIVATE_EXTENSIONS_DEPLOY_KEY }}
       - name: Restore and verify release keystore
         env:
           KEYSTORE: ${{ runner.temp }}/c001apk-signing/release.jks
@@ -337,6 +370,11 @@ jobs:
       - name: Sync build date
         run: dart tool/update_build_date.dart ${{ needs.checks.outputs.build_date }}
       - run: flutter pub get --enforce-lockfile
+      - name: Assemble official implementation
+        if: env.USE_PRIVATE_EXTENSIONS == 'true'
+        uses: ./.github/actions/private-extensions
+        with:
+          private-key: ${{ secrets.PRIVATE_EXTENSIONS_DEPLOY_KEY }}
       - run: flutter build ios --release --no-codesign --no-pub
       - name: Check arm64 binary
         run: |

@@ -1,0 +1,26 @@
+name: Assemble official extensions
+description: Assemble a pinned private implementation for trusted main builds
+inputs:
+  private-key:
+    description: Read-only deploy key for the private implementation repository
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Read pinned private revision
+      id: pin
+      shell: bash
+      working-directory: apps/flutter
+      run: dart tool/private_extensions_revision.dart
+    - name: Checkout private implementation
+      uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      with:
+        repository: TG-Twilight/Flutter.Liquid.Glass
+        ref: ${{ steps.pin.outputs.revision }}
+        ssh-key: ${{ inputs.private-key }}
+        persist-credentials: false
+        path: .local/private-extensions
+    - name: Validate and assemble implementation
+      shell: bash
+      working-directory: apps/flutter
+      run: dart tool/assemble_private_extensions.dart --source ../../.local/private-extensions --in-place

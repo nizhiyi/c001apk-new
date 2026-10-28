@@ -18,7 +18,13 @@ class Empty extends LoadingState<Never> {
 class Success<T> extends LoadingState<T> {
   final T response;
   final bool isPublic;
-  const Success(this.response, {this.isPublic = false});
+
+  /// Original accepted rows and server cursors, before display filtering.
+  final T? rawResponse;
+  final String? firstItem;
+  final String? lastItem;
+  const Success(this.response,
+      {this.isPublic = false, this.rawResponse, this.firstItem, this.lastItem});
 }
 
 class Error extends LoadingState<Never> {

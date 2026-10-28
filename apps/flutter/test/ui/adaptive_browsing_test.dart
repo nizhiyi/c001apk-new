@@ -429,11 +429,12 @@ void main() {
         ),
       );
 
-  testWidgets('detail opens left, list remains interactive and back closes it',
+  testWidgets(
+      'detail stays centered and the auxiliary list remains interactive',
       (tester) async {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    await resize(tester, 1200);
+    await resize(tester, 1400);
     await tester.pumpWidget(reader());
     await tester.tap(find.text('动态 0'));
     await tester.pumpAndSettle();
@@ -446,6 +447,9 @@ void main() {
     await tester.pageBack();
     await tester.pumpAndSettle();
     expect(find.text('详情 1'), findsNothing);
+    expect(find.text('详情 0'), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
     expect(find.text('动态 1'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
@@ -481,7 +485,7 @@ void main() {
     await tester.tap(find.text('动态 0'));
     await tester.pumpAndSettle();
     expect(find.text('详情 0'), findsOneWidget);
-    expect(tester.getTopLeft(find.text('动态 0')).dx, greaterThan(300));
+    expect(find.text('动态 0').hitTestable(), findsNothing);
     await tester.pageBack();
     await resize(tester, 400, height: 760);
     await tester.tap(find.text('动态 0'));
@@ -489,7 +493,8 @@ void main() {
     expect(find.text('独立详情'), findsOneWidget);
   });
 
-  testWidgets('automatic mode opens portrait tablet details beside its feed',
+  testWidgets(
+      'automatic mode centers portrait tablet details and hides a cramped feed',
       (tester) async {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -498,7 +503,7 @@ void main() {
     await tester.tap(find.text('动态 0'));
     await tester.pumpAndSettle();
     expect(find.text('详情 0'), findsOneWidget);
-    expect(tester.getTopLeft(find.text('动态 0')).dx, greaterThan(300));
+    expect(find.text('动态 0').hitTestable(), findsNothing);
   });
 
   for (final mode in [ReadingMode.automatic, ReadingMode.disabled]) {
@@ -638,6 +643,28 @@ void main() {
     await tester.pumpAndSettle();
     expect(position('reading-scroll').pixels, detailOffset);
     expect(position('feed-scroll').pixels, greaterThan(0));
+  });
+
+  testWidgets('reselecting a cached article focuses its reading scroll region',
+      (tester) async {
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await resize(tester, 1400);
+    await tester.pumpWidget(reader());
+    for (final id in [0, 1, 0]) {
+      await tester.tap(find.text('动态 $id'));
+      await tester.pumpAndSettle();
+    }
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pumpAndSettle();
+    final position = tester
+        .state<ScrollableState>(find
+            .descendant(
+                of: find.byKey(const ValueKey('reading-scroll')),
+                matching: find.byType(Scrollable))
+            .first)
+        .position;
+    expect(position.pixels, greaterThan(0));
   });
 
   testWidgets('variable height cards preserve their anchor when columns change',

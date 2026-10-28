@@ -7,12 +7,17 @@ import '../utils/emoji_util.dart';
 import '../utils/extensions.dart';
 import '../utils/storage_util.dart';
 import '../utils/utils.dart';
+import '../logic/media/feed_media.dart';
+import 'imageview.dart';
 
 Widget htmlText(
   String html, {
   double fontSize = 15,
   bool isBold = false,
   List<String>? picArr,
+  List<FeedMedia>? mediaItems,
+  String? contentId,
+  MediaContentType contentType = MediaContentType.feed,
   Function? onClick,
   Function? onShowTotalReply,
   Function? onViewFan,
@@ -47,9 +52,13 @@ Widget htmlText(
                   onShowTotalReply();
                 }
               } else if (url.contains('image.coolapk.com')) {
-                Map<dynamic, dynamic> arguments = {
-                  "imgList": !picArr.isNullOrEmpty ? picArr : [url],
-                };
+                final pictures = !picArr.isNullOrEmpty ? picArr! : [url];
+                final arguments = mediaGalleryArguments(pictures,
+                    mediaItems: mediaItems,
+                    contentId: contentId,
+                    contentType: contentType,
+                    initialPage:
+                        pictures.indexOf(url).clamp(0, pictures.length - 1));
                 Get.toNamed('/imageview', arguments: arguments);
               } else if (url == '/contacts/fans') {
                 if (onViewFan != null) {

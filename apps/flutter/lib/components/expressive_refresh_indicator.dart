@@ -46,7 +46,7 @@ class _ExpressiveRefreshIndicatorState
         child: widget.child,
       ),
       Positioned(
-        top: 16,
+        top: 16 + MediaQuery.paddingOf(context).top,
         left: 0,
         right: 0,
         child: IgnorePointer(

@@ -62,7 +62,8 @@ class LocalFollowPager {
               failures[cursor] = '动态响应异常，请稍后重试';
               return;
             }
-            final items = result.response as List<Datum>;
+            final items =
+                (result.rawResponse ?? result.response) as List<Datum>;
             cursor.end = items.any((e) => e.entityTemplate == 'noMoreDataCard');
             final feeds = items
                 .where((e) =>
@@ -70,8 +71,11 @@ class LocalFollowPager {
                     e.id != null &&
                     e.uid.toString() == cursor.uid)
                 .toList();
-            cursor.first ??= feeds.firstOrNull?.id.toString();
-            cursor.last = feeds.lastOrNull?.id.toString() ?? cursor.last;
+            cursor.first ??=
+                result.firstItem ?? feeds.firstOrNull?.id.toString();
+            cursor.last = result.lastItem ??
+                feeds.lastOrNull?.id.toString() ??
+                cursor.last;
             cursor.page++;
             cursor.buffer
                 .addAll(feeds.where((e) => cursor.seen.add('${e.id}')));

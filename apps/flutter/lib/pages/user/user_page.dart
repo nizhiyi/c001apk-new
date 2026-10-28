@@ -12,6 +12,8 @@ import 'package:indent/indent.dart';
 import 'package:intl/intl.dart';
 
 import '../../components/cards/user_info_card.dart';
+import '../../components/content_filter_gate.dart';
+import '../../logic/content_filter/content_filter_rule.dart';
 import '../../components/footer.dart';
 import '../../components/item_card.dart';
 import '../../components/adaptive_card_list.dart';
@@ -48,6 +50,8 @@ class UserPage extends StatefulWidget {
 
 class _UserPageState extends State<UserPage> {
   final String _uid = Get.parameters['uid'].orEmpty;
+  late final ScrollController _scrollController =
+      _userController.scrollController ??= ScrollController();
 
   late final String _random = DeviceUtil.randHexString(8);
   late final UserController _userController = Get.put(
@@ -147,7 +151,9 @@ class _UserPageState extends State<UserPage> {
               index == dataList.length || dataList[index].entityType != 'feed',
           itemBuilder: (_, index) {
             if (index == dataList.length) {
-              if (!_userController.isEnd && !_userController.isLoading) {
+              if (!_userController.isEnd &&
+                  !_userController.isLoading &&
+                  !_userController.automaticLoadPaused) {
                 _userController.setFooterState(LoadingState.loading());
                 _userController.onGetData(false);
               }
@@ -182,6 +188,22 @@ class _UserPageState extends State<UserPage> {
 
   @override
   Widget build(BuildContext context) {
+    return ContentFilterRevealScope(
+      contentKeys: _userController.revealedContentKeys,
+      authorUids: _userController.revealedAuthorUids,
+      child: ContentFilterGate(
+        data: Datum(entityType: 'user', id: _uid, uid: _uid),
+        scope: FilterScope.user,
+        page: true,
+        onReveal: () {
+          _userController.revealAuthorForPage(_uid);
+        },
+        builder: _buildScreen,
+      ),
+    );
+  }
+
+  Widget _buildScreen(BuildContext context) {
     return Scaffold(
       body: Stack(
         children: [
@@ -195,7 +217,8 @@ class _UserPageState extends State<UserPage> {
                 return notification.depth == 0;
               },
               onRefresh: () async {
-                if (!_userController.isBlocked) {
+                if (!_userController.isBlocked ||
+                    _userController.revealedAuthorUids.contains(_uid)) {
                   _userController.onReset();
                   await _userController.onGetData();
                 } else {
@@ -204,6 +227,8 @@ class _UserPageState extends State<UserPage> {
               },
               child: _userController.userState.value is Success
                   ? CustomScrollView(
+                      key: PageStorageKey('user-reading:$_uid'),
+                      controller: _scrollController,
                       physics: const AlwaysScrollableScrollPhysics(
                         parent: BouncingScrollPhysics(),
                       ),
@@ -212,6 +237,9 @@ class _UserPageState extends State<UserPage> {
                           child:
                               _buildUserInfo(_userController.userState.value),
                         ),
+                        SliverToBoxAdapter(
+                            child: ContentFilterSummary(
+                                controller: _userController)),
                         _buildUserFeed(_userController.loadingState.value),
                       ],
                     )

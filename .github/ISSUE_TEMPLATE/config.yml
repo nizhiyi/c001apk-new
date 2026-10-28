@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 使用说明与已知限制
+    url: https://github.com/TG-Twilight/c001apk/blob/main/docs/DEVELOPMENT.md
+    about: 使用疑问、构建方法、账号与设备说明，请先查阅文档。
+  - name: 查找已有反馈（含已关闭）
+    url: https://github.com/TG-Twilight/c001apk/issues?q=is%3Aissue
+    about: 提交前搜索；同一问题或建议请在原 issue 补充。
+  - name: 下载最新正式版本
+    url: https://github.com/TG-Twilight/c001apk/releases/latest
+    about: 反馈问题前，请先使用本仓库提供的最新可用版本复测。

@@ -5,6 +5,7 @@ import 'package:get/get.dart';
 
 import '../components/footer.dart';
 import 'adaptive_card_list.dart';
+import 'content_filter_gate.dart';
 import '../components/item_card.dart';
 import '../logic/model/feed/datum.dart';
 import '../logic/state/loading_state.dart';
@@ -29,36 +30,46 @@ Widget commonBody(
   bool isReply2Reply = false,
   dynamic uid,
 }) {
-  return Obx(() {
-    final body = buildBody(
-      commonController,
-      leading: leading,
-      itemBuilder: itemBuilder,
-      isHomeCard: isHomeCard,
-      isReply2Reply: isReply2Reply,
-      uid: uid,
-    );
-    if (commonController.loadingState.value is Success) {
-      return ExpressiveRefreshIndicator(
-        refreshKey: commonController.refreshKey,
-        onRefresh: () async {
-          commonController.onReset();
-          await commonController.onGetData();
-        },
-        child: body,
-      );
-    }
-    if (leading == null) return Center(child: body);
-    // Keep system messages reachable even if private messages fail or are empty.
-    return Column(children: [
-      Padding(padding: const EdgeInsets.all(10), child: leading),
-      Expanded(child: Center(child: body)),
-    ]);
-  });
+  return Builder(
+      builder: (context) => Obx(() {
+            final body = ContentFilterRevealScope(
+              contentKeys: commonController.revealedContentKeys,
+              authorUids: commonController.revealedAuthorUids,
+              child: buildBody(
+                commonController,
+                context: context,
+                leading: leading,
+                itemBuilder: itemBuilder,
+                isHomeCard: isHomeCard,
+                isReply2Reply: isReply2Reply,
+                uid: uid,
+              ),
+            );
+            if (commonController.loadingState.value is Success) {
+              return ExpressiveRefreshIndicator(
+                refreshKey: commonController.refreshKey,
+                onRefresh: () async {
+                  commonController.onReset();
+                  await commonController.onGetData();
+                },
+                child: Column(children: [
+                  ContentFilterSummary(controller: commonController),
+                  Expanded(child: body),
+                ]),
+              );
+            }
+            if (leading == null) return Center(child: body);
+            // Keep system messages reachable even if private messages fail or are empty.
+            return Column(children: [
+              Padding(padding: const EdgeInsets.all(10), child: leading),
+              Expanded(child: Center(child: body)),
+            ]);
+          }));
 }
 
 Widget buildBody(
   CommonController commonController, {
+  BuildContext? context,
   Widget? leading,
   Widget Function(Datum)? itemBuilder,
   bool isHomeCard = false,
@@ -102,10 +113,12 @@ Widget buildBody(
           ),
           padding: EdgeInsets.only(
               left: isReply2Reply ? 0 : 10,
-              top: isReply2Reply ? 0 : 10,
+              top: isReply2Reply
+                  ? 0
+                  : 10 + MediaQuery.paddingOf(context ?? Get.context!).top,
               right: isReply2Reply ? 0 : 10,
               bottom: (isReply2Reply ? 0 : 10) +
-                  MediaQuery.of(Get.context!).padding.bottom),
+                  MediaQuery.paddingOf(context ?? Get.context!).bottom),
           itemCount: dataList.length + 1 + (leading == null ? 0 : 1),
           itemBuilder: (_, index) {
             if (leading != null) {
@@ -113,7 +126,9 @@ Widget buildBody(
               index--;
             }
             if (index == dataList.length) {
-              if (!commonController.isEnd && !commonController.isLoading) {
+              if (!commonController.isEnd &&
+                  !commonController.isLoading &&
+                  !commonController.automaticLoadPaused) {
                 commonController.setFooterState(LoadingState.loading());
                 commonController.onGetData(false);
               }
@@ -152,7 +167,10 @@ Widget buildBody(
       return AdaptiveCardList(
         controller: commonController.scrollController,
         padding: EdgeInsets.fromLTRB(
-            10, 10, 10, 10 + MediaQuery.of(Get.context!).padding.bottom),
+            10,
+            10 + MediaQuery.paddingOf(context ?? Get.context!).top,
+            10,
+            10 + MediaQuery.paddingOf(context ?? Get.context!).bottom),
         leading: leading,
         itemCount: dataList.length,
         isFullWidth: (index) => !const {
@@ -181,7 +199,9 @@ Widget buildBody(
           );
         },
         footer: Builder(builder: (_) {
-          if (!commonController.isEnd && !commonController.isLoading) {
+          if (!commonController.isEnd &&
+              !commonController.isLoading &&
+              !commonController.automaticLoadPaused) {
             commonController.setFooterState(LoadingState.loading());
             commonController.onGetData(false);
           }

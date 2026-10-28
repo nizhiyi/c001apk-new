@@ -3,6 +3,10 @@ import 'package:get/get.dart';
 
 import 'page_transitions.dart';
 import '../components/feed_reading_pane.dart';
+import '../components/adaptive_reading_pane.dart';
+import '../components/onboarding_gate.dart';
+import '../logic/onboarding/onboarding_state.dart';
+import '../pages/onboarding/onboarding_page.dart';
 
 import '../pages/app/app_page.dart';
 import '../pages/accounts/accounts_page.dart';
@@ -31,6 +35,21 @@ import '../pages/user/user_page.dart';
 import '../pages/webview/webview_page.dart';
 
 class AppPages {
+  static bool canReplay(String name) {
+    final path = Uri.tryParse(name)?.path;
+    if (path == null ||
+        const {'/login', '/chat', '/webview', '/accounts', '/onboarding'}
+            .contains(path)) return false;
+    final parts = path.split('/');
+    return getPages.any((page) {
+      final pattern = page.name.split('/');
+      return pattern.length == parts.length &&
+          List.generate(parts.length,
+                  (i) => pattern[i].startsWith(':') || pattern[i] == parts[i])
+              .every((match) => match);
+    });
+  }
+
   static GetPage _getPage({
     required String name,
     required Widget Function() page,
@@ -61,8 +80,19 @@ class AppPages {
     _getPage(name: '/settings', page: () => const SettingsPage()),
     _getPage(name: '/accounts', page: () => const AccountsPage()),
     _getPage(
+        name: '/onboarding',
+        page: () => OnboardingPage(state: OnboardingState.current!)),
+    _getPage(
       name: '/',
-      page: () => const MainPage(),
+      page: () {
+        final state = OnboardingState.current;
+        if (state == null) return const MainPage();
+        return OnboardingGate(
+            state: state,
+            mainBuilder: (_) => const MainPage(),
+            onboardingBuilder: (_) =>
+                OnboardingPage(state: state, initial: true));
+      },
     ),
     _getPage(
       name: '/params',
@@ -78,7 +108,7 @@ class AppPages {
     ),
     _getPage(
       name: '/feed/:id',
-      page: () => const FeedPage(),
+      page: () => const ReadingContentFrame(child: FeedPage()),
     ),
     _getPage(
       name: '/event/:id',

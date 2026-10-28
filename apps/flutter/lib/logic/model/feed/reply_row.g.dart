@@ -13,8 +13,8 @@ ReplyRow _$ReplyRowFromJson(Map<String, dynamic> json) => ReplyRow(
       ruid: json['ruid'],
       rusername: json['rusername'] as String?,
       pic: json['pic'] as String?,
-      picArr:
-          (json['picArr'] as List<dynamic>?)?.map((e) => e as String).toList(),
+      picArr: feedMediaUrlsFromJson(readFeedMediaUrls(json, 'picArr')),
+      imageUriList: readFeedMediaMetadata(json, 'imageUriList'),
       message: json['message'] as String?,
       replynum: json['replynum'],
       likenum: json['likenum'],
@@ -45,6 +45,7 @@ Map<String, dynamic> _$ReplyRowToJson(ReplyRow instance) => <String, dynamic>{
       'rusername': instance.rusername,
       'pic': instance.pic,
       'picArr': instance.picArr,
+      'imageUriList': instance.imageUriList,
       'message': instance.message,
       'replynum': instance.replynum,
       'likenum': instance.likenum,

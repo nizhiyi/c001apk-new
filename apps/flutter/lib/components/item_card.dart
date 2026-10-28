@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 
 import '../components/cards/app_card.dart';
@@ -16,6 +18,9 @@ import '../components/cards/message_card.dart';
 import '../components/cards/notification_card.dart';
 import '../components/cards/text_card.dart';
 import '../components/cards/title_card.dart';
+import 'content_filter_gate.dart';
+import 'content_filter_text.dart';
+import '../logic/content_filter/content_filter_rule.dart';
 import '../logic/model/feed/datum.dart';
 import '../utils/extensions.dart';
 
@@ -78,7 +83,15 @@ Widget itemCard(
       );
     case 'feed_reply':
       if (data.likeUserInfo != null) {
-        return LikeCard(data: data);
+        return ContentFilterGate(
+            data: data,
+            scope: FilterScope.comment,
+            builder: (_) => ContentFilterText(
+                source: data.message ?? '',
+                builder: (message) => LikeCard(
+                    data: Datum.fromJson(
+                        jsonDecode(jsonEncode(data)) as Map<String, dynamic>)
+                      ..message = message)));
       } else {
         return FeedReplyCard(
           data: data,
@@ -112,23 +125,32 @@ Widget itemCard(
         isHomeCard: isHomeCard,
       );
     case 'user':
-      return AppCard(
-        appCardType: AppCardType.USER,
-        data: data,
-        isHomeCard: isHomeCard,
-      );
+      return ContentFilterGate(
+          data: data,
+          scope: FilterScope.user,
+          builder: (_) => AppCard(
+                appCardType: AppCardType.USER,
+                data: data,
+                isHomeCard: isHomeCard,
+              ));
     case 'topic':
-      return AppCard(
-        appCardType: AppCardType.TOPIC,
-        data: data,
-        isHomeCard: isHomeCard,
-      );
+      return ContentFilterGate(
+          data: data,
+          scope: FilterScope.feed,
+          builder: (_) => AppCard(
+                appCardType: AppCardType.TOPIC,
+                data: data,
+                isHomeCard: isHomeCard,
+              ));
     case 'contacts':
-      return AppCard(
-        appCardType: AppCardType.CONTACTS,
-        data: data,
-        isHomeCard: isHomeCard,
-      );
+      return ContentFilterGate(
+          data: data,
+          scope: FilterScope.user,
+          builder: (_) => AppCard(
+                appCardType: AppCardType.CONTACTS,
+                data: data,
+                isHomeCard: isHomeCard,
+              ));
     case 'recentHistory':
       return AppCard(
         appCardType: AppCardType.RECENT,

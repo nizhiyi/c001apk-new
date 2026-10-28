@@ -11,6 +11,8 @@ import '../logic/model/feed/datum.dart';
 import '../logic/model/feed_article/feed_article.dart';
 import '../logic/network/network_repo.dart';
 import '../logic/state/loading_state.dart';
+import '../logic/content_filter/content_filter_projection.dart';
+import '../logic/content_filter/content_filter_rule.dart';
 import 'content_export.dart';
 import 'storage_util.dart';
 
@@ -95,15 +97,35 @@ class ContentExportService {
     final pinned = (feed.topReplyRows ?? <Datum>[])
         .map((reply) => snapshotExportFeed(reply)..isTop = 1)
         .toList();
-    final comments =
-        selectExportComments(pinned, popular, blockedUids: _blockedUids());
-    var doc = ExportDocument.fromFeed(feed,
-        articles: articles, comments: comments, notices: notices);
+    bool allowed(Datum item) =>
+        ContentFilterProjection.match(item, scope: FilterScope.comment) == null;
+    final comments = selectExportComments(
+            pinned.where(allowed).toList(), popular.where(allowed).toList(),
+            blockedUids: _blockedUids())
+        .map((item) => ContentFilterProjection.exportCopy(item,
+            scope: FilterScope.comment))
+        .toList();
+    final safeFeed =
+        ContentFilterProjection.exportCopy(feed, scope: FilterScope.feed);
+    final safeArticles =
+        ContentFilterProjection.match(feed, scope: FilterScope.feed) != null
+            ? <FeedArticle>[]
+            : articles
+                .map((part) => FeedArticle.fromJson(part.toJson())
+                  ..message =
+                      ContentFilterProjection.sanitizeQuotes(part.message ?? '')
+                  ..title =
+                      ContentFilterProjection.sanitizeQuotes(part.title ?? '')
+                  ..description = ContentFilterProjection.sanitizeQuotes(
+                      part.description ?? ''))
+                .toList();
+    var doc = ExportDocument.fromFeed(safeFeed,
+        articles: safeArticles, comments: comments, notices: notices);
     if (format == ExportFormat.markdown) {
       if (doc.imageUrls.isNotEmpty) {
         notices.add('Markdown 图片保留在线链接，离线阅读图片请另存为 HTML。');
-        doc = ExportDocument.fromFeed(feed,
-            articles: articles, comments: comments, notices: notices);
+        doc = ExportDocument.fromFeed(safeFeed,
+            articles: safeArticles, comments: comments, notices: notices);
       }
       return PreparedExport(
           '${doc.fileName}.md',

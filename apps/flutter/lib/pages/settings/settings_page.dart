@@ -18,6 +18,8 @@ import '../../logic/app_update/update_preferences.dart';
 import '../../logic/accounts/account_store.dart';
 import '../../components/settings/drop_down_menu_item.dart';
 import '../../components/settings/item_title.dart';
+import '../../components/settings/media_auto_load_settings.dart';
+import '../../components/settings/navigation_appearance_settings.dart';
 import '../../components/settings/switch_item.dart';
 import '../../constants/constants.dart';
 import '../../pages/blacklist/black_list_page.dart' show BlackListType;
@@ -27,6 +29,7 @@ import '../../utils/global_data.dart';
 import '../../logic/local_follow/local_follow_store.dart';
 import '../local_follow/local_follow_page.dart';
 import 'device_identity_page.dart';
+import 'content_filter_page.dart';
 
 enum ImageQuality {
   AUTO,
@@ -43,7 +46,7 @@ enum ImageQuality {
 enum SettingsSection {
   appearance('外观与字号', '动态取色、主题、深色模式与字体大小', Icons.palette_outlined),
   content('关注与内容', '本地关注、悄悄关注、账号关注与表情', Icons.feed_outlined),
-  privacy('浏览与隐私', '用户与话题黑名单、浏览历史、外部链接', Icons.privacy_tip_outlined),
+  privacy('浏览与隐私', '图片加载、黑名单、浏览历史与外部链接', Icons.privacy_tip_outlined),
   storage('存储与更新', '图片缓存、版本与更新检查', Icons.storage_outlined),
   protocol('协议与设备', '设备标识与客户端请求参数', Icons.developer_mode);
 
@@ -83,6 +86,13 @@ class _SettingsPageState extends State<SettingsPage> {
                 ),
             ]),
             ExpressiveListSection(children: [
+              ListTile(
+                leading: const Icon(Icons.explore_outlined),
+                title: const Text('使用引导'),
+                subtitle: const Text('重新选择发布偏好、外观与内容屏蔽'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Get.toNamed('/onboarding'),
+              ),
               ValueListenableBuilder(
                 valueListenable: GStorage.settings
                     .listenable(keys: [AccountStore.storageKey]),
@@ -164,19 +174,7 @@ class _SettingsDetailPageState extends State<SettingsDetailPage> {
 
   List<Widget> _items(BuildContext context) => switch (widget.section) {
         SettingsSection.appearance => [
-            const ExpressiveListSection(children: [
-              DropDownMenuItem(
-                icon: Icons.vertical_split_outlined,
-                title: '分栏阅读',
-                subtitle: '左侧查看动态，右侧继续浏览。自动适配大屏；手机开启后横屏生效，窄屏仍用单页',
-                boxKey: SettingsBoxKey.readingMode,
-                items: [
-                  DropdownMenuItem(value: 0, child: Text('自动')),
-                  DropdownMenuItem(value: 1, child: Text('开启')),
-                  DropdownMenuItem(value: 2, child: Text('关闭')),
-                ],
-              ),
-            ]),
+            const ItemTitle(title: '主题与配色'),
             ExpressiveListSection(children: [
               const SwitchItem(
                 icon: Icons.palette_outlined,
@@ -222,6 +220,39 @@ class _SettingsDetailPageState extends State<SettingsDetailPage> {
                   ),
                 ],
                 forceAppUpdate: true,
+              ),
+              ValueListenableBuilder(
+                valueListenable: GStorage.settings
+                    .listenable(keys: [SettingsBoxKey.hideHomePublishButton]),
+                builder: (context, _, __) => ListTile(
+                  leading: const Icon(Icons.edit_off_outlined),
+                  title: const Text('不写东西'),
+                  subtitle: const Text('开启后，将隐藏主页的发布入口'),
+                  trailing: Switch(
+                    value: GStorage.hideHomePublishButton,
+                    onChanged: (value) => GStorage.settings
+                        .put(SettingsBoxKey.hideHomePublishButton, value),
+                  ),
+                  onTap: () => GStorage.settings.put(
+                      SettingsBoxKey.hideHomePublishButton,
+                      !GStorage.hideHomePublishButton),
+                ),
+              ),
+            ]),
+            const ItemTitle(title: '导航栏'),
+            const NavigationAppearanceSettings(),
+            const ItemTitle(title: '阅读与字号'),
+            const ExpressiveListSection(children: [
+              DropDownMenuItem(
+                icon: Icons.vertical_split_outlined,
+                title: '分栏阅读',
+                subtitle: '左侧查看动态，右侧继续浏览。自动适配大屏；手机开启后横屏生效，窄屏仍用单页',
+                boxKey: SettingsBoxKey.readingMode,
+                items: [
+                  DropdownMenuItem(value: 0, child: Text('自动')),
+                  DropdownMenuItem(value: 1, child: Text('开启')),
+                  DropdownMenuItem(value: 2, child: Text('关闭')),
+                ],
               ),
             ]),
             ExpressiveListSection(children: [
@@ -281,6 +312,17 @@ class _SettingsDetailPageState extends State<SettingsDetailPage> {
             ]),
           ],
         SettingsSection.privacy => [
+            const ExpressiveListSection(children: [
+              MediaAutoLoadSettings(),
+            ]),
+            ExpressiveListSection(children: [
+              ListTile(
+                title: const Text('屏蔽傻逼内容'),
+                subtitle: const Text('本机内容过滤、规则与例外，默认关闭'),
+                leading: const Icon(Icons.filter_alt_outlined),
+                onTap: () => Get.to(() => const ContentFilterPage()),
+              ),
+            ]),
             ExpressiveListSection(children: [
               ListTile(
                 title: const Text('用户黑名单'),
